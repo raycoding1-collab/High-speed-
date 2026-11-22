@@ -18,7 +18,7 @@ PADDY_PATH = [None]
 QUALITY = {
     "preview": dict(res=(640, 360), samples=16, veg_scale=0.6),
     "still": dict(res=(1920, 1080), samples=96, veg_scale=1.0),
-    "final": dict(res=(1920, 1080), samples=128, veg_scale=1.0),
+    "final": dict(res=(1920, 1080), samples=48, veg_scale=1.0),         # measured: ~5.7 min/frame on a 4-core runner
     "final4k": dict(res=(3840, 2160), samples=96, veg_scale=1.0),
 }
 

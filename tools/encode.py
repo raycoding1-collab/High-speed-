@@ -60,7 +60,7 @@ def main():
     ap.add_argument("--last", type=int, required=True); ap.add_argument("--audio", required=True)
     ap.add_argument("--out", required=True); ap.add_argument("--ig", default=None)
     ap.add_argument("--overlay", default=None); ap.add_argument("--fps", type=int, default=24)
-    ap.add_argument("--report", default=None); ap.add_argument("--maxrate", default="12M")
+    ap.add_argument("--report", default=None); ap.add_argument("--maxrate", default="10M")
     a = ap.parse_args()
     missing = [f for f in range(a.first, a.last + 1) if not png_complete(os.path.join(a.frames, f"frame_{f:05d}.png"))]
     if missing:
