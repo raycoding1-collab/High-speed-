@@ -2,7 +2,7 @@
 
 Status: **Verified** = done and checked by the method in the last column · **Built** = implemented, not yet
 verified in a render · **Partial** = works but below the quality bar · **Open** = not done yet.
-Snapshot: 2026-11-22 ~01:15 UTC (UTC+1 local 02:15).
+Snapshot: 2026-11-22 ~03:30 UTC (UTC+1 local 04:30).
 
 ## 0. Engine decision
 | # | Requirement | Status | How it is verified |
@@ -21,10 +21,10 @@ Snapshot: 2026-11-22 ~01:15 UTC (UTC+1 local 02:15).
 | 1.6 | Gangway fairings | Verified | Ribbed beige outer windshields between all cars (side comparison) |
 | 1.7 | Bogie skirts | Verified | Skirts down to 0.18 m above rail as measured |
 | 1.8 | Underfloor equipment | Partial | Bogies (frames, 920 mm wheelsets, axle boxes, springs, air springs, dampers, motors, discs) and flush underfloor; no separate underfloor boxes (hidden by fairings on the real train) |
-| 1.9 | Pantograph | Partial | Single-arm, raised on car 6 to the 5.30 m wire (+120 mm uplift); roof fairing around the base not yet modelled |
+| 1.9 | Pantograph | Verified | Articulated single-arm (A-frame lower arm, upper arm, guide rod, damper, sprung 1950 mm head with 2 carbon strips + horns), side shrouds, HV roof cable on insulators; head at 5.42 m = wire + 120 mm uplift (S6 render) |
 | 1.10 | Lights | Verified | White headlights on car 1, red tail lights on car 8 (emissive lens in the eye cluster) |
 | 1.11 | Wipers | Verified | Single parked wiper on the windscreen |
-| 1.12 | Glass with interior visible | Verified | Tinted side windows show seats/ceiling lights; windscreen transparent from inside (TIR bug found and fixed) |
+| 1.12 | Glass with interior visible | Verified | Privacy glass (~5 %) shows seats/ceiling lights; windscreen transparent from inside (TIR bug fixed); cab console with screens in the cab view |
 | 1.13 | Wear: dirt low on the body, bug marks on nose, true sky reflections | Verified | Dirt gradient + streaks in texture; bug marks on forward faces (reduced after review); metallic paint + clear coat reflecting the HDRI sky |
 | 1.14 | Livery | Verified | Silver, black band → canopy, red canopy line, red/orange stripe, end blocks, CR450 logo, gold 复兴号, gold emblem; side-by-side with ref photos |
 
@@ -37,9 +37,9 @@ Snapshot: 2026-11-22 ~01:15 UTC (UTC+1 local 02:15).
 | 2.4 | OCS masts ~every 50 m with correct zig-zag | Verified | Masts every 48 m, ±300 mm alternating stagger in the canted frame, contact wire 5.30 m, system height 1.6 m, droppers, AF/PW wires |
 | 2.5 | Noise barriers | Verified | 2.15 m above rail, s 2350–3150 m beside the village (400 posts) |
 | 2.6 | Viaduct piers | Verified | 32 m box girders on round-ended piers with caps |
-| 2.7 | Signals and markings | Partial | Balises, hectometre posts, mast plates, GSM-R mast. No lineside signals (correct for CTCS-3 cab signalling). Neutral-section signs and readable km numbers not yet done |
-| 2.8 | Physical sky and sun | Verified | Poly Haven golden-hour sky (sun 4.6° high) rotated to the west + matched warm sun lamp |
-| 2.9 | Atmospheric haze for depth (and valley mist) | Built | Volumes rejected (noise, 3.7× cost, measured); analytic height-fog in every shader written, render check pending |
+| 2.7 | Signals and markings | Verified | Balises, hectometre posts, readable km posts, 断/合 neutral-section boards on OCS masts, mast plates, GSM-R mast. No lineside signals (correct for CTCS-3 cab signalling) |
+| 2.8 | Physical sky and sun | Verified | Golden-hour MORNING sky (sun 4.6-5.6° high, ENE): HDRI sun disc measured in a rendered panorama at 70.7° vs lamp 72.0° (a 180° error was found and fixed) |
+| 2.9 | Atmospheric haze for depth (and valley mist) | Verified | Analytic exponential valley mist + haze evaluated per shading point (closed-form optical depth, HG sun phase): noise-free, ~0 cost; checked in all 9 shots |
 | 2.10 | Vegetation moving in the wind | Verified | Geometry-nodes 4D-noise sway driven by scene time (instance counts checked in depsgraph) |
 | 2.11 | CC0 assets if reachable | Verified | Poly Haven reachable after network change; pinned list, MD5-verified downloads |
 
