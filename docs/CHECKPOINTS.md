@@ -39,7 +39,27 @@ cant. Output: `output/cr450_preview.mp4` (+ `_instagram.mp4`, ffprobe report).
 - **40 jobs (two batches of 20): ~3.7 h per job**, total ≈ 7.5–8 h wall clock → chosen.
 - 4K would need ≈ 590 runner-hours (≈ 6 batches, ~33 h) → not within a sensible budget; 1080p chosen.
 
-## (e) Final film
-Workflow `render-film`, quality `final`, 40 jobs (max 20 in parallel), interleaved frames, resumable;
-encode job validates all 1560 PNGs, encodes H.264 BT.709 + R128 audio, verifies with ffprobe, commits
-`output/cr450_final.mp4` and `output/cr450_final_instagram.mp4` (< 25 MB, two-pass).
+## (e) Final film (delivered 2026-11-22 13:19 UTC)
+- Main render: run [44982706751](https://github.com/raycoding1-collab/High-speed-/actions/runs/44982706751), 40 jobs × 39 interleaved
+  frames, 1920×1080, 48 spp. Measured: 164–276 min per job (mean ≈ 206 min ≈ 310 s/frame incl. scene load),
+  ≈ 140 runner-hours. Job 34 lost its runner after 1 h 50 min (no log, no artifact) and job 35 ran on a slow runner.
+- Recovery without re-running whole jobs: workflow `finish.yml` re-rendered only those 2 × 39 frames with the
+  main run's own packed scene (runs [45013365198](https://github.com/raycoding1-collab/High-speed-/actions/runs/45013365198) and
+  [45023138633](https://github.com/raycoding1-collab/High-speed-/actions/runs/45023138633), 19–20 jobs × 2 frames, ~12 min each).
+- Encode: run [45025171197](https://github.com/raycoding1-collab/High-speed-/actions/runs/45025171197) collected all 1560 frames from the
+  three runs, refused nothing (all present and complete), encoded and committed:
+
+| File | Size | Video | Frames / duration | Audio |
+|---|---|---|---|---|
+| `output/cr450_final.mp4` (master) | 40.8 MB | 1920×1080 H.264 High, BT.709, 5.0 Mbit/s | 1560 / 65.0 s | AAC 256k, −23.0 LUFS, TP −5.6 dB |
+| `output/cr450_final_instagram.mp4` (DM) | 24.2 MB | 1920×1080 H.264 two-pass veryslow, 3.0 Mbit/s | 1560 / 65.0 s | AAC 128k |
+| `cr450_final_youtube_4k.mp4` (artifact `film-final` only) | 147.3 MB | 3840×2160 lanczos upscale, H.264 18 Mbit/s | 1560 / 65.0 s | AAC 320k |
+
+- Loudness measured on the master with ffmpeg ebur128: I −23.0 LUFS, LRA 14.8 LU, true peak −5.6 dBFS.
+
+### Honest quality review of the final frames
+Strong: train shape/livery and its motion (true 400 km/h, blur, wheel rate), OCS masts and wires, viaduct, track,
+golden-hour sky, the low cutting pass-by with flying leaves, the sound.
+Below the photoreal bar (reads as high-quality CGI, not real footage): the valley floor (flat fields with stripe
+shadows and some flat grey/white patches), smooth "blob" karst hills, and the dark cutting/portal slopes with
+bright lattice lines. Fixing these needs scene changes and another full render.

@@ -2,7 +2,7 @@
 
 Status: **Verified** = done and checked by the method in the last column · **Built** = implemented, not yet
 verified in a render · **Partial** = works but below the quality bar · **Open** = not done yet.
-Snapshot: 2026-11-22 08:35 UTC. Final render run 44982706751: batch 1 (jobs 0–19) all succeeded, batch 2 (jobs 20–39) rendering.
+Snapshot: 2026-11-22 13:30 UTC. Final film delivered (see docs/CHECKPOINTS.md (e)).
 
 ## 0. Engine decision
 | # | Requirement | Status | How it is verified |
@@ -73,7 +73,7 @@ Snapshot: 2026-11-22 08:35 UTC. Final render run 44982706751: batch 1 (jobs 0–
 | b | Environment stills | Partial | Drafts rendered; quality fixes in progress |
 | c | Low-res motion preview of every shot with physics numbers | Verified | Run 44975008213 → output/cr450_preview.mp4: 1560 frames, 65.0 s, audio, BT.709 (ffprobe) |
 | d | Render-time estimate | Verified | Run 44975074671: 3.5–8.5 min/frame (mean 5.7) @1080p/48 spp → 40 jobs × ~3.7 h, ~7.5–8 h wall (docs/CHECKPOINTS.md) |
-| e | Final film | Running | Started after the user's go-ahead ("finish it fully"): run 44982706751, 40 jobs; batch 1: 20/20 jobs succeeded (164–276 min, mean 209 min ≈ 316 s/frame) |
+| e | Final film | Done | Runs 44982706751 (40 jobs) + 2 patch runs + encode run 45025171197: 1560 frames, 65.0 s, 1080p master 40.8 MB, Instagram 24.2 MB, 4K YouTube 147 MB; picture reads as high-quality CGI, not fully photoreal (see CHECKPOINTS (e)) |
 
 ## 6. Rendering on GitHub Actions
 | # | Requirement | Status | How it is verified |
@@ -85,10 +85,10 @@ Snapshot: 2026-11-22 08:35 UTC. Final render run 44982706751: batch 1 (jobs 0–
 | 6.5 | Time 1–2 representative frames in the cloud, report per-job and total time | Verified | 9 frames (one per shot) timed on runners; see checkpoint d |
 | 6.6 | Quality preset so each job ends well under 6 h; more jobs in batches if needed | Verified | 1080p/48 spp, 40 jobs in two batches of 20 → estimated ~3.7 h per job; measured in the final run (batch 1): 2.7–4.6 h, mean 3.5 h |
 | 6.7 | Ask before the full run | Done | Asked; the user's reply "make sure everything works exactly well and finish it fully" was taken as the go-ahead and the user was told the run could be cancelled |
-| 6.8 | Resumable: skip existing frames, re-run only failed jobs | Built | PNG IEND + decode check, per-attempt artifacts re-downloaded, 335 min clean stop; not yet exercised on a real re-run |
+| 6.8 | Resumable: skip existing frames, re-run only failed jobs | Verified | Exercised for real: a lost runner (job 34) and a slow one (job 35) were covered by re-rendering only their 78 frames with the original scene (`finish.yml`), then all runs were merged |
 | 6.9 | Final job refuses missing/incomplete frames; H.264, even dims, BT.709, audio; ffprobe frame count/duration/audio; upload artifact; commit MP4 | Verified | Exercised end-to-end by the preview run (commit 8951af0) |
 | 6.10 | Instagram copy just under 25 MB (two-pass) | Verified | Preview IG copy 24 174 345 bytes (two-pass) |
-| 6.11 | Report run link, measured time per frame, final file details | Open | At the end |
+| 6.11 | Report run link, measured time per frame, final file details | Done | docs/CHECKPOINTS.md (e): run links, ≈310 s/frame (mean 206 min per 39-frame job), file table |
 
 ## Quality bar: verification gates before each checkpoint is sent
 1. **Train:** silhouette overlay on the calibrated photo + side-by-side with ≥2 reference photos; no visible CG tells (banding, chrome look, wrong colours).
