@@ -29,6 +29,8 @@ REFS = {
         ((70.0, 541.5), (0.0, 0.7175, 0.0)),          # near rail under tip
         ((1131.0, 534.0), (40.0, 0.7175, 0.0)),       # near rail at X=40
     ]),
+    "ref09": dict(file="ref09.jpg", size=(1280, 723), pts=[]),
+    "ref05": dict(file="ref05.jpg", size=(1280, 720), pts=[]),
     "ref03": dict(file="ref03.jpg", size=(1280, 853), pts=[
         ((1005.0, 462.5), (1.30, 0.0, 1.72)),         # gold logo centre
         ((558.0, 309.0), (8.69, -1.66, 3.37)),        # cab door top front
@@ -61,10 +63,16 @@ def main():
     ap.add_argument("ref"); ap.add_argument("out")
     ap.add_argument("--samples", type=int, default=32)
     ap.add_argument("--scale", type=float, default=1.0)
+    ap.add_argument("--full", action="store_true", help="fully textured train + ground, side-by-side output")
+    ap.add_argument("--texdir", default="/tmp/claude-0/livery")
+    ap.add_argument("--manual", default=None, help="manual camera: x,y,z,tx,ty,tz,lens (world: nose at origin, train towards +x)")
     args = ap.parse_args(sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:])
     ref = REFS[args.ref]
-    K, rvec, tvec, err, res = solve_camera(ref)
-    print(f"[match] rms {err:.2f}px  f={K[0,0]:.0f}px  per-point {np.round(res,1).tolist()}")
+    if args.manual is None:
+        K, rvec, tvec, err, res = solve_camera(ref)
+        print(f"[match] rms {err:.2f}px  f={K[0,0]:.0f}px  per-point {np.round(res,1).tolist()}")
+    if args.full:
+        return render_full(args, ref, None if args.manual else (K, rvec, tvec))
 
     import bpy
     from film import bl, train, specs as S, lookdev
@@ -98,6 +106,47 @@ def main():
     comp = a.copy(); comp.paste(rgba.convert("RGB"), (0, 0), rgba.split()[3])
     sheet = Image.new("RGB", (w, h * 3))
     sheet.paste(a, (0, 0)); sheet.paste(comp, (0, h)); sheet.paste(outl, (0, 2 * h))
+    sheet.save(args.out)
+    print("[match] wrote", args.out)
+
+
+def render_full(args, ref, cal):
+    import bpy, math
+    from film import bl, train, lookdev
+    from film import infra, materials as M
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    sc = bpy.context.scene
+    bl.set_cycles(sc, samples=args.samples)
+    lookdev.simple_world(sc, sun_elev=28, sun_rot=150, strength=0.18)
+    sun = bpy.data.objects.new("Sun", bpy.data.lights.new("Sun", "SUN")); sun.data.energy = 3.5
+    sun.rotation_euler = (math.radians(55), 0, math.radians(150)); sc.collection.objects.link(sun)
+    coll = bl.collection("Train")
+    res = train.build_train(args.texdir, coll)
+    for c in res["cars"]:
+        if c.name == "Car8":
+            c.rotation_euler = (0, 0, math.pi)
+    # simple ballasted double track for context
+    g = lookdev.ground(sc, 600, (0.22, 0.21, 0.20)); g.location.z = -0.30
+    rail = M.rail_material()
+    from film.trainparts import box, setmat
+    for y in (-0.7175, 0.7175, 5.0 - 0.7175, 5.0 + 0.7175):
+        setmat(box("rail", (600, 0.07, 0.17), (-250, y, -0.085), sc.collection), rail)
+    cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam")); sc.collection.objects.link(cam); sc.camera = cam
+    w, h = ref["size"]
+    if cal:
+        K, rvec, tvec = cal
+        bl.camera_from_opencv(cam, rvec, tvec, K[0, 0], w, h)
+    else:
+        v = [float(x) for x in args.manual.split(",")]
+        cam.location = v[:3]; bl.look_at(cam, v[3:6]); cam.data.lens = v[6]
+    sc.render.resolution_x = int(w * args.scale); sc.render.resolution_y = int(h * args.scale)
+    tmp = args.out + ".render.png"; sc.render.filepath = tmp
+    bpy.ops.render.render(write_still=True)
+    from PIL import Image
+    a = Image.open(os.path.join(REFDIR, ref["file"])).convert("RGB")
+    b = Image.open(tmp).convert("RGB").resize(a.size)
+    sheet = Image.new("RGB", (a.width * 2 + 10, a.height), (255, 255, 255))
+    sheet.paste(a, (0, 0)); sheet.paste(b, (a.width + 10, 0))
     sheet.save(args.out)
     print("[match] wrote", args.out)
 

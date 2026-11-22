@@ -99,7 +99,9 @@ def formation(s, lat, g):
     on = (s > A.VIADUCT[1] - 20) & (s < A.TUNNEL_S + 15)
     al = np.abs(lat)
     # cutting slope 1:1 (soil) / embankment slope 1:1.5
-    cut = form_z + np.maximum(al - half, 0) * 1.0
+    ex = np.maximum(al - half, 0)
+    tier = np.floor(ex / 10.0)                       # 1:1 slope, 2 m bench every 8 m of height
+    cut = form_z + tier * 8.0 + np.minimum(ex - tier * 10.0, 8.0)
     fill = form_z - np.maximum(al - half, 0) / 1.5
     target = np.where(g > form_z, np.minimum(g, cut), np.maximum(g, fill))
     # ditches at the cutting toe
@@ -155,7 +157,17 @@ def build_terrain(coll, mats):
             # leave the tunnel bore open beyond the portal (hill surface stays, ground under track removed)
             a = i * n + j
             faces.append((a, a + n, a + n + 1, a + 1))       # wound so normals point up
-    strip = new_mesh_object("TerrainCorridor", V, faces, coll, smooth=True)
+    nlat = len(lats)
+    uv = []
+    for (a, b, c, d) in faces:
+        for vi in (a, b, c, d):
+            i, j = divmod(vi, nlat)
+            uv.append((ss[i], lats[j]))
+    strip = new_mesh_object("TerrainCorridor", V, faces, coll, smooth=True, uvs=np.array(uv))
+    nat = natural_ground(PX, PY).ravel()
+    S2d = np.repeat(ss[:, None], n, 1).ravel(); L2d = np.repeat(lats[None, :], len(ss), 0).ravel()
+    cutm = ((nat > V[:, 2] + 0.3) & (np.abs(L2d) > 7.2) & (S2d > A.VIADUCT[1]) & (S2d < A.TUNNEL_S + 5)).astype(np.float32)
+    at = strip.data.attributes.new("cutmask", "FLOAT", "POINT"); at.data.foreach_set("value", cutm)
     strip.data.materials.append(mats["terrain"])
     return far, strip
 
@@ -211,9 +223,15 @@ def terrain_material(tex, paddy_img):
     # world-space tiling for detail textures
     mp = nt.nodes.new("ShaderNodeMapping"); mp.inputs["Scale"].default_value = (0.35, 0.35, 0.35)
     L(geo.outputs["Position"], mp.inputs[0])
-    grass = _tex(nt, tex["grass"]["diff"]); L(mp.outputs[0], grass.inputs[0])
+    grass0 = _tex(nt, tex["grass"]["diff"]); L(mp.outputs[0], grass0.inputs[0])
+    gbw = nt.nodes.new("ShaderNodeRGBToBW"); L(grass0.outputs["Color"], gbw.inputs[0])
+    grass = nt.nodes.new("ShaderNodeMix"); grass.data_type = "RGBA"; grass.blend_type = "MULTIPLY"; grass.inputs["Factor"].default_value = 1.0
+    grass.inputs["B"].default_value = (0.36, 0.62, 0.15, 1)
+    L(gbw.outputs[0], grass.inputs["A"])
     forest = _tex(nt, tex["forest"]["diff"]); L(mp.outputs[0], forest.inputs[0])
-    rock = _tex(nt, tex["rock"]["diff"]); L(mp.outputs[0], rock.inputs[0])
+    rock0 = _tex(nt, tex["cliff"]["diff"]); L(mp.outputs[0], rock0.inputs[0])
+    rock = nt.nodes.new("ShaderNodeHueSaturation"); rock.inputs["Saturation"].default_value = 0.3; rock.inputs["Value"].default_value = 1.2
+    L(rock0.outputs["Color"], rock.inputs["Color"])
     mud = _tex(nt, tex["mud"]["diff"]); L(mp.outputs[0], mud.inputs[0])
     nor = _tex(nt, tex["grass"]["nor"], True); L(mp.outputs[0], nor.inputs[0])
     # paddy map in world XY over the valley
@@ -233,7 +251,7 @@ def terrain_material(tex, paddy_img):
         L(ftype, c.inputs[0]); return c.outputs[0]
     is_ripe, water, is_fallow = cmp(0.33), cmp(0.66), cmp(1.0)
     # slope factor
-    slope = nt.nodes.new("ShaderNodeMapRange"); slope.inputs[1].default_value = 0.55; slope.inputs[2].default_value = 0.85
+    slope = nt.nodes.new("ShaderNodeMapRange"); slope.inputs[1].default_value = 0.30; slope.inputs[2].default_value = 0.45
     slope.inputs[3].default_value = 1.0; slope.inputs[4].default_value = 0.0
     L(nsep.outputs["Z"], slope.inputs[0])
     # elevation-based: valley (z<6) -> paddy zone
@@ -261,20 +279,37 @@ def terrain_material(tex, paddy_img):
     hill = nt.nodes.new("ShaderNodeMix"); hill.data_type = "RGBA"
     big = nt.nodes.new("ShaderNodeTexNoise"); big.inputs["Scale"].default_value = 0.01; big.inputs["Detail"].default_value = 2
     L(geo.outputs["Position"], big.inputs["Vector"])
-    L(big.outputs["Fac"], hill.inputs["Factor"]); L(grass.outputs["Color"], hill.inputs["A"])
+    L(big.outputs["Fac"], hill.inputs["Factor"]); L(grass.outputs["Result"], hill.inputs["A"])
     canopy = nt.nodes.new("ShaderNodeMix"); canopy.data_type = "RGBA"; canopy.blend_type = "MULTIPLY"; canopy.inputs["Factor"].default_value = 1.0
-    canopy.inputs["B"].default_value = (0.45, 0.62, 0.30, 1)
+    canopy.inputs["B"].default_value = (0.30, 0.55, 0.16, 1)
     L(forest.outputs["Color"], canopy.inputs["A"]); L(canopy.outputs["Result"], hill.inputs["B"])
     rk = nt.nodes.new("ShaderNodeMix"); rk.data_type = "RGBA"
     L(slope.outputs[0], rk.inputs["Factor"]); L(hill.outputs["Result"], rk.inputs["A"]); L(rock.outputs["Color"], rk.inputs["B"])
     # paddy: rice vs water vs dikes
     pad = nt.nodes.new("ShaderNodeMix"); pad.data_type = "RGBA"
     dk = nt.nodes.new("ShaderNodeMath"); dk.operation = "POWER"; dk.inputs[1].default_value = 0.6; L(dike, dk.inputs[0])
-    L(dk.outputs[0], pad.inputs["Factor"]); L(ricem.outputs["Result"], pad.inputs["A"]); L(grass.outputs["Color"], pad.inputs["B"])
+    L(dk.outputs[0], pad.inputs["Factor"]); L(ricem.outputs["Result"], pad.inputs["A"]); L(grass.outputs["Result"], pad.inputs["B"])
     allc = nt.nodes.new("ShaderNodeMix"); allc.data_type = "RGBA"
     L(pz2.outputs[0], allc.inputs["Factor"]); L(rk.outputs["Result"], allc.inputs["A"]); L(pad.outputs["Result"], allc.inputs["B"])
+    # diamond lattice concrete frames (slope protection) on cut slopes: uses UV = (chainage, lateral)
+    uvn = nt.nodes.new("ShaderNodeUVMap")
+    usep = nt.nodes.new("ShaderNodeSeparateXYZ"); L(uvn.outputs[0], usep.inputs[0])
+    def diag(sign):
+        a = nt.nodes.new("ShaderNodeMath"); a.operation = "MULTIPLY_ADD"; a.inputs[1].default_value = sign
+        L(usep.outputs["Y"], a.inputs[0]); L(usep.outputs["X"], a.inputs[2])
+        b = nt.nodes.new("ShaderNodeMath"); b.operation = "PINGPONG"; b.inputs[1].default_value = 2.0; L(a.outputs[0], b.inputs[0])
+        c = nt.nodes.new("ShaderNodeMath"); c.operation = "LESS_THAN"; c.inputs[1].default_value = 0.28; L(b.outputs[0], c.inputs[0])
+        return c.outputs[0]
+    lat1, lat2 = diag(1.0), diag(-1.0)
+    latt = nt.nodes.new("ShaderNodeMath"); latt.operation = "MAXIMUM"; L(lat1, latt.inputs[0]); L(lat2, latt.inputs[1])
+    cm = nt.nodes.new("ShaderNodeAttribute"); cm.attribute_name = "cutmask"
+    lm = nt.nodes.new("ShaderNodeMath"); lm.operation = "MULTIPLY"; L(latt.outputs[0], lm.inputs[0]); L(cm.outputs["Fac"], lm.inputs[1])
+    cutgrass = nt.nodes.new("ShaderNodeMix"); cutgrass.data_type = "RGBA"; L(cm.outputs["Fac"], cutgrass.inputs["Factor"])
+    L(allc.outputs["Result"], cutgrass.inputs["A"]); L(grass.outputs["Result"], cutgrass.inputs["B"])
+    frame_col = nt.nodes.new("ShaderNodeMix"); frame_col.data_type = "RGBA"; frame_col.inputs["B"].default_value = (0.26, 0.255, 0.24, 1)
+    L(lm.outputs[0], frame_col.inputs["Factor"]); L(cutgrass.outputs["Result"], frame_col.inputs["A"])
     p = nt.nodes.new("ShaderNodeBsdfPrincipled")
-    L(allc.outputs["Result"], p.inputs["Base Color"]); p.inputs["Roughness"].default_value = 0.85
+    L(frame_col.outputs["Result"], p.inputs["Base Color"]); p.inputs["Roughness"].default_value = 0.85
     nm = nt.nodes.new("ShaderNodeNormalMap"); nm.inputs["Strength"].default_value = 0.6
     L(nor.outputs["Color"], nm.inputs["Color"]); L(nm.outputs[0], p.inputs["Normal"])
     # water in flooded paddies: mirror-like with slight ripples, muddy tint

@@ -28,9 +28,9 @@ FONT_LAT = os.environ.get("FONT_LAT", "/usr/share/fonts/truetype/freefont/FreeSa
 
 # colours (sRGB 0-255)
 SILVER = (178, 181, 186)
-BLACK = (16, 17, 20)
-RED = (200, 18, 40)
-ORANGE = (240, 92, 36)
+BLACK = (8, 8, 10)
+RED = (205, 12, 30)
+ORANGE = (245, 85, 20)
 WHITE = (236, 236, 232)
 SKIRT = (48, 50, 54)
 GOLD = (206, 160, 62)
@@ -38,7 +38,7 @@ GASKET = (20, 20, 22)
 
 # material channels
 MET_SILVER, MET_PAINT = 255, 0
-R_SILVER, R_BLACK, R_PAINT, R_SKIRT, R_GLASS = 70, 40, 55, 150, 10
+R_SILVER, R_BLACK, R_PAINT, R_SKIRT, R_GLASS = 105, 75, 80, 150, 10
 
 
 class Atlas:
@@ -113,9 +113,9 @@ def interp_curve(pts, X):
 
 
 # ------------------------------------------------------------------ livery definitions
-R1 = [(1.10, 1.58), (2.0, 1.78), (3.0, 2.08), (4.0, 2.38), (5.0, 2.66), (6.0, 2.90), (7.0, 3.08),
+R1 = [(0.95, 1.47), (1.6, 1.62), (2.0, 1.76), (3.0, 2.08), (4.0, 2.38), (5.0, 2.66), (6.0, 2.90), (7.0, 3.08),
       (8.0, 3.22), (9.0, 3.34), (10.0, 3.45), (11.0, 3.56), (11.8, 3.70)]          # upper red line (canopy edge)
-LB = [(1.15, 1.56), (2.0, 1.66), (2.6, 1.80), (4.0, 2.05), (5.5, 2.27), (7.0, 2.42)]  # lower edge of black side wedge
+LB = [(1.6, 1.58), (2.0, 1.66), (2.6, 1.80), (4.0, 2.05), (5.5, 2.27), (7.0, 2.42)]  # lower edge of black side wedge
 WS_LOW = [(2.05, 1.98), (3.0, 2.30), (4.0, 2.62), (5.0, 2.94), (5.35, 3.05)]      # windscreen lower edge
 BAND_TOP_FRONT = [(7.0, 2.42), (8.0, 2.62), (9.0, 2.86), (9.6, 2.97), (10.2, 3.00)]
 CANOPY_END_X = 9.4
@@ -130,7 +130,7 @@ def draw_end_car(side):
     A.paint([(5.0, -0.1), (6.3, 0.83), (L, 0.83), (L, -0.1)], SKIRT, rough=R_SKIRT)
     # --- black canopy (above R1) and black side wedge (between LB and R1)
     top = ZMAX
-    canopy = [(x, z) for x, z in R1 if x <= CANOPY_END_X] + [(CANOPY_END_X, interp_curve(R1, CANOPY_END_X)), (CANOPY_END_X, top), (0.9, top), (0.9, 1.56)]
+    canopy = [(x, z) for x, z in R1 if x <= CANOPY_END_X] + [(CANOPY_END_X, interp_curve(R1, CANOPY_END_X)), (CANOPY_END_X, top), (0.9, top), (0.9, 1.47)]
     A.paint(canopy, BLACK, rough=R_BLACK)
     wedge = LB + [(7.0, 2.42)] + [(x, z) for x, z in reversed(R1) if 1.1 <= x <= 7.0]
     A.paint(wedge, BLACK, rough=R_BLACK)
@@ -360,14 +360,14 @@ def _bug_field(X, Y, Z, fwd, rng):
     ys, xs = np.nonzero(fwd > 0.25)
     if len(xs) == 0:
         return m
-    n = min(9000, len(xs) // 12)
+    n = min(2200, len(xs) // 40)
     pick = rng.choice(len(xs), n, replace=False)
     for k in pick:
         y, x = ys[k], xs[k]
         if rng.random() > fwd[y, x]:
             continue
-        r = rng.choice([1, 1, 1, 2, 2, 3])
-        ln = rng.integers(0, 6)
+        r = rng.choice([0, 1, 1, 1, 2])
+        ln = rng.integers(0, 4)
         y0, y1 = max(0, y - r), min(H, y + r + 1); x0, x1 = max(0, x - r), min(W, x + r + 1 + ln)
         m[y0:y1, x0:x1] = np.maximum(m[y0:y1, x0:x1], rng.uniform(0.35, 0.95))
     return m

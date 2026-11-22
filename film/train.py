@@ -189,6 +189,7 @@ def build_train(texdir, coll=None, raised_panto_car=6, with_interior=True):
                 cab = P.build_cab(f"Car{i}_cab", coll, X_origin); cab.parent = ob
                 wip = P.build_wiper(f"Car{i}_wiper", coll, X_origin); wip.parent = ob
                 dfl = P.build_deflector(f"Car{i}_deflector", coll, X_origin); dfl.parent = ob
+                emb = P.build_emblem(f"Car{i}_emblem", coll, X_origin); emb.parent = ob
         # gangway at the rear coupling plane (except last car)
         if i < S.N_CARS:
             g = P.build_gangway(f"Gangway{i}", coll)

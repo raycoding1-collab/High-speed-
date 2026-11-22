@@ -286,7 +286,7 @@ def build_deflector(name, coll, X_origin):
     verts = []
     for X, hw in pts:
         for y in (-hw, hw):
-            verts.append((X_origin - X, y, 0.13)); verts.append((X_origin - X, y, 0.36))
+            verts.append((X_origin - X, y, 0.16)); verts.append((X_origin - X, y, 0.24))
     faces = []
     n = len(pts)
     for i in range(n - 1):
@@ -294,9 +294,29 @@ def build_deflector(name, coll, X_origin):
         faces += [(a, b, b + 2, a + 2), (a + 1, a + 3, b + 3, b + 1), (a, a + 1, b + 1, b), (a + 2, b + 2, b + 3, a + 3)]
     faces += [(0, 2, 3, 1)]
     ob = new_mesh_object(name, np.array(verts), faces, coll, smooth=False)
-    setmat(ob, M.principled("Deflector", (0.11, 0.11, 0.12), 0.6, 0.45))
+    setmat(ob, M.principled("Deflector", (0.55, 0.56, 0.58), 0.85, 0.35))
     md = ob.modifiers.new("bevel", "BEVEL"); md.width = 0.03; md.segments = 2
     return ob
+
+
+def build_emblem(name, coll, X_origin):
+    """Gold CR emblem (ring + rail-profile glyph) on the black face above the bill."""
+    gold = principled_gold()
+    X, z = 1.30, 1.64
+    hs = TS.half_section(X)
+    parts = []
+    ring = revolve(name + "_r", [(0.115, -0.006), (0.135, -0.006), (0.135, 0.006), (0.115, 0.006)], "x", 40, coll)
+    setmat(ring, gold); parts.append(ring)
+    for (sz, loc) in (((0.012, 0.13, 0.025), (0, 0, 0.055)), ((0.012, 0.03, 0.10), (0, 0, 0.0)), ((0.012, 0.10, 0.022), (0, 0, -0.055))):
+        b = box(name + "_g", sz, loc, coll); setmat(b, gold); parts.append(b)
+    ob = join(parts, name); coll.objects.link(ob)
+    ob.location = (X_origin - X + 0.01, 0, z)
+    ob.rotation_euler = (0, math.radians(-38), 0)
+    return ob
+
+
+def principled_gold():
+    return M.principled("EmblemGold", (0.78, 0.55, 0.20), 1.0, 0.3)
 
 
 def build_wiper(name, coll, X_origin):
@@ -355,10 +375,10 @@ def build_car_interior(name, coll, length, seat_row_mesh, rows_x):
 def build_cab(name, coll, X_origin):
     dark = M.principled("CabDash", (0.03, 0.03, 0.035), 0.0, 0.6)
     seat = M.principled("CabSeat", (0.05, 0.05, 0.06), 0.0, 0.7)
-    screen = M.principled("CabScreen", (0.02, 0.05, 0.08), 0.0, 0.2, emission=(0.2, 0.5, 0.9), estrength=1.5)
-    parts = [setmat(box(name + "_dash", (0.9, 2.3, 0.45), (X_origin - 5.3, 0, 2.15), coll, 0.05), dark),
-             setmat(box(name + "_scr1", (0.02, 0.35, 0.22), (X_origin - 5.05, 0.25, 2.48), coll), screen),
-             setmat(box(name + "_scr2", (0.02, 0.35, 0.22), (X_origin - 5.05, -0.25, 2.48), coll), screen),
+    screen = M.principled("CabScreen", (0.02, 0.05, 0.08), 0.0, 0.2, emission=(0.2, 0.5, 0.9), estrength=0.6)
+    parts = [setmat(box(name + "_dash", (0.9, 2.3, 0.30), (X_origin - 5.55, 0, 2.02), coll, 0.05), dark),
+             setmat(box(name + "_scr1", (0.20, 0.30, 0.02), (X_origin - 5.75, 0.28, 2.18), coll), screen),
+             setmat(box(name + "_scr2", (0.20, 0.30, 0.02), (X_origin - 5.75, -0.28, 2.18), coll), screen),
              setmat(box(name + "_seat", (0.55, 0.55, 0.9), (X_origin - 6.3, 0.0, 1.85), coll, 0.05), seat),
              setmat(box(name + "_wall", (0.06, 3.2, 2.3), (X_origin - 7.6, 0, 2.35), coll), dark)]
     ob = join(parts, name); coll.objects.link(ob)

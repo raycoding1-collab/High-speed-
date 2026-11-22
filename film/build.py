@@ -136,7 +136,7 @@ def make_cameras(scene, shots, res):
             ob.parent = parent
             ob.location = sh.attach[1]
             if sh.name.startswith("S5"):
-                ob.rotation_euler = (math.radians(87.0), 0, math.radians(-90))     # look forward (+x), slightly down
+                ob.rotation_euler = (math.radians(84.5), 0, math.radians(-90))     # look forward (+x), slightly down
             else:
                 ob.rotation_euler = (math.radians(80.0), 0, math.radians(90))      # look back (-x) at the pantograph
             fr = np.arange(f0, f1 + 2, dtype=np.float32)
@@ -332,12 +332,12 @@ def build_vegetation(coll, assets, towers, scale=1.0):
             s, lat = A.nearest_s(p[:, 0], p[:, 1])
             return (s > lo) & (s < hi) & (np.abs(lat) > lat_min) & (n[:, 2] > 0.5) & _sightline_mask(p, 6.0)
         return f
-    pts = W.sample_surface([strip], 0.02 * scale, rng, slope_near(3700, 4700, 16), max_n=30000)
+    pts = W.sample_surface([strip], 0.035 * scale, rng, slope_near(3700, 4700, 30), max_n=40000)
     log("  hill trees", len(pts))
     W.scatter_tree("VegHillTrees", coll, pts, trees, (0.7, 1.25), 2, wind=0.03)
-    pts = W.sample_surface([strip], 0.15 * scale, rng, slope_near(3750, 4600, 8.5), max_n=60000)
+    pts = W.sample_surface([strip], 0.30 * scale, rng, slope_near(3750, 4600, 8.5), max_n=90000)
     W.scatter_tree("VegHillShrubs", coll, pts, shrubs, (0.7, 1.5), 3, wind=0.06)
-    pts = W.sample_surface([strip], 4.0 * scale, rng, slope_near(3950, 4520, 6.6), max_n=160000)
+    pts = W.sample_surface([strip], 6.0 * scale, rng, slope_near(3900, 4520, 6.6), max_n=260000)
     log("  cutting grass", len(pts))
     W.scatter_tree("VegCuttingGrass", coll, pts, grasses, (0.8, 1.6), 4, wind=0.10)
     # valley: tree lines and shrubs along field edges near the viaduct (S1/S2/S3)

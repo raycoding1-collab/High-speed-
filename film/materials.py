@@ -71,7 +71,7 @@ def body_material(name, col_path, dat_path):
     inv = nt.nodes.new("ShaderNodeMath"); inv.operation = "SUBTRACT"; inv.inputs[0].default_value = 1.0
     L(dirt, inv.inputs[1]); L(met, mm.inputs[0]); L(inv.outputs[0], mm.inputs[1])
     # coat weight = (1 - dirt) * 0.9
-    cw = nt.nodes.new("ShaderNodeMath"); cw.operation = "MULTIPLY"; cw.inputs[1].default_value = 0.9
+    cw = nt.nodes.new("ShaderNodeMath"); cw.operation = "MULTIPLY"; cw.inputs[1].default_value = 0.55
     L(inv.outputs[0], cw.inputs[0])
     bump = nt.nodes.new("ShaderNodeBump"); bump.inputs["Strength"].default_value = 0.6
     bump.inputs["Distance"].default_value = 0.004
@@ -80,7 +80,8 @@ def body_material(name, col_path, dat_path):
     p = nt.nodes.new("ShaderNodeBsdfPrincipled")
     L(gapd.outputs["Result"], p.inputs["Base Color"]); L(mm.outputs[0], p.inputs["Metallic"])
     L(rmath.outputs[0], p.inputs["Roughness"]); L(cw.outputs[0], p.inputs["Coat Weight"])
-    p.inputs["Coat Roughness"].default_value = 0.035
+    p.inputs["Coat Roughness"].default_value = 0.06
+    p.inputs["Specular IOR Level"].default_value = 0.35
     L(bump.outputs[0], p.inputs["Normal"]); L(bump.outputs[0], p.inputs["Coat Normal"])
     # glass: mask A. 1 = side window (dark tint), 0.5 windscreen (light green tint), 0.25 head/tail lamp lens
     a = col.outputs["Alpha"]
