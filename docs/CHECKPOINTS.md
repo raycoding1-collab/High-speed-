@@ -63,3 +63,20 @@ golden-hour sky, the low cutting pass-by with flying leaves, the sound.
 Below the photoreal bar (reads as high-quality CGI, not real footage): the valley floor (flat fields with stripe
 shadows and some flat grey/white patches), smooth "blob" karst hills, and the dark cutting/portal slopes with
 bright lattice lines. Fixing these needs scene changes and another full render.
+
+## v2 (2026-11-22): fixes after the v1 review, hybrid render
+- Fixed: every scattered instance was NaN (geometry-nodes wake 0 x inf) -> all trees/rice/crowns invisible in v1;
+  valley tree budget spent outside the region; teal shadows from a compositor lift on linear data; S7/S9 exposure.
+- Render: Modal 10 x L40S for S4-S7 (648 frames, 48 min, 43.7 s/frame, run 45043063354) + GitHub 19 jobs for
+  S1-S3, S8-S9 (912 frames, run 45043444866; 6 jobs hit the 5.6 h deadline a few frames short and were re-run
+  with resume) -> merged and encoded with finish.yml.
+
+## v3 (in progress): realism + worldbuilding pass (from the user's improvement list and the Gemini comparison)
+- New: Guangxi house kit (5 types, real openings, balconies, tiled/pantile roofs, solar heaters, walled yards),
+  hamlets placed where the cameras look, village roads with ditches, power lines, fish ponds, straw stacks,
+  greenhouses, citrus orchards, hillside tombs, bamboo on the river banks, cauliflower-crown groves, forested hill
+  massif with karst knobs; real 3D lattice beams, concrete side drains and gravel cess in the cutting; detailed cab
+  console with DMI displays; concrete rain streaks / per-span tone / pier-foot soiling; polished anisotropic rail
+  heads; pressure-wave camera jolt at the trackside pass; S4 helicopter re-shot front-lit; S9 cut 2 s after the
+  tail; singing rails, pressure thump, traction hum and mast whooshes in the sound; lens dispersion.
+- Gate evidence: docs/V3_VERIFICATION.md.
