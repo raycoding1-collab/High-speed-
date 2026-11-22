@@ -639,6 +639,10 @@ def crown_proxy(name, coll, seed=0):
         p = np.array(v.co)
         n = 1 + 0.22 * math.sin(3 * p[0] + seed) * math.cos(2.5 * p[1]) + 0.15 * math.sin(4 * p[2] + seed * 2) + rng.uniform(-0.06, 0.06)
         v.co = (p[0] * n * 1.0, p[1] * n * 1.0, p[2] * n * 0.8 + 1.6)
+    # trunk: the crown sits 0.8 (x scale) above the ground, so without it the trees float above the fields
+    tr = bmesh.ops.create_cone(bm, cap_ends=True, segments=8, radius1=0.13, radius2=0.08, depth=1.5)
+    for v in tr["verts"]:
+        v.co.z += 0.75
     me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new(name, me); coll.objects.link(ob)
     for p in ob.data.polygons:
@@ -656,7 +660,15 @@ def crown_proxy(name, coll, seed=0):
         p.inputs["Subsurface Weight"].default_value = 0.15
         p.inputs["Subsurface Radius"].default_value = (0.3, 0.6, 0.1)
     ob.data.materials.append(m)
-    trunk = bpy.data.meshes.new(name + "_t")
+    bark = bpy.data.materials.get("CrownBark")
+    if bark is None:
+        from . import materials as M
+        bark = M.principled("CrownBark", (0.045, 0.035, 0.025), 0.0, 0.85)
+    ob.data.materials.append(bark)
+    zc = np.zeros(len(ob.data.polygons) * 3); ob.data.polygons.foreach_get("center", zc)
+    zc = zc.reshape(-1, 3)
+    mi = ((np.hypot(zc[:, 0], zc[:, 1]) < 0.16) & (zc[:, 2] < 1.4)).astype(np.int32)   # trunk faces (near the axis)
+    ob.data.polygons.foreach_set("material_index", mi)
     return ob
 
 
