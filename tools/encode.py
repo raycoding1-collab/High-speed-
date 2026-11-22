@@ -85,7 +85,7 @@ def main():
         target_bytes = 24.6e6
         v_kbps = int((target_bytes * 8 / dur - 128e3) / 1000 * 0.985)
         log = os.path.join(tempfile.gettempdir(), "x264_2pass")
-        base = ["ffmpeg", "-y", *common_in, "-vf", vf, "-c:v", "libx264", "-preset", "slow", "-b:v", f"{v_kbps}k",
+        base = ["ffmpeg", "-y", *common_in, "-vf", vf, "-c:v", "libx264", "-preset", "veryslow", "-b:v", f"{v_kbps}k",
                 "-maxrate", f"{int(v_kbps * 1.6)}k", "-bufsize", f"{int(v_kbps * 2)}k", *tags, "-passlogfile", log, "-frames:v", str(n)]
         run(base + ["-pass", "1", "-an", "-f", "mp4", os.devnull])
         run(base + ["-pass", "2", "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-movflags", "+faststart", a.ig])
