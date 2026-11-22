@@ -85,7 +85,7 @@ def mic_track(sh, t):
 
 
 def render_shot(sh, pool, rng, layout):
-    dur = sh.dur
+    dur = sh.sim_dur                     # real time; speed ramps are applied afterwards (time_warp)
     n = int(round(dur * FS))
     tk = np.linspace(0, dur, int(dur * 500) + 1)                  # control rate 500 Hz
     off = A.track_offset()
@@ -158,6 +158,15 @@ def render_shot(sh, pool, rng, layout):
         env = np.where(tk > t_pass, np.exp(-(tk - t_pass) / 1.4) * (1 - np.exp(-(tk - t_pass) / 0.15)), 0.0)
         out += wind_noise(n, rng, 0.9) * np.interp(t_audio, tk, env) * 0.5
     return out
+
+
+def time_warp(sh, x, n_screen):
+    """Play a real-time track back with the shot's speed ramp, like the sound of high-speed-camera footage slowed
+    down: sample at screen time tau is the real-time sample at sim(tau), so pitch drops with the playback speed."""
+    if not sh.ramp:
+        return x[:n_screen] if len(x) >= n_screen else np.pad(x, (0, n_screen - len(x)))
+    ts = sh.sim(np.arange(n_screen) / FS) * FS
+    return np.interp(ts, np.arange(len(x)), x)
 
 
 def interior_or_roof(sh, n, rng, pool):
@@ -324,11 +333,13 @@ def render(out_path, seed=5):
     pool = band_pool(FS * 20, rng)
     tracks = []
     for sh, f0, f1 in SH.timeline(shots):
-        n = int(round(sh.dur * FS))
+        n = int(round(sh.dur * FS))                       # screen samples
+        n_sim = int(round(sh.sim_dur * FS))               # real-time samples
         tr = render_shot(sh, pool, rng, layout)
         tr = tr * 10 ** ((SHOT_PEAK_DB[sh.name[:2]] - _peak_rms_db(tr)) / 20)
         if not sh.attach:
-            tr = tr + near_track_layers(sh, n, rng, 10 ** (SHOT_PEAK_DB[sh.name[:2]] / 20))
+            tr = tr + near_track_layers(sh, n_sim, rng, 10 ** (SHOT_PEAK_DB[sh.name[:2]] / 20))
+        tr = time_warp(sh, tr, n)
         amb = ambience(n, rng, "valley" if sh.name[:2] in ("S1", "S2", "S3", "S4") else "hill")
         amb = amb * 10 ** ((AMB_DB - _rms_db(amb)) / 20)
         if not sh.attach:

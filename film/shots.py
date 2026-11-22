@@ -30,10 +30,37 @@ def _ground_at(x, y):
 
 class Shot:
     def __init__(self, name, dur, s0, lens, desc, cam_fn, aim_fn=None, attach=None, fstop=None, focus=None, shake=0.0,
-                 jolt=False):
-        self.name, self.dur, self.s0, self.lens, self.desc = name, dur, s0, lens, desc
+                 jolt=False, ramp=None):
+        self.name, self.s0, self.lens, self.desc = name, s0, lens, desc
         self.cam_fn, self.aim_fn, self.attach, self.fstop, self.focus, self.shake = cam_fn, aim_fn, attach, fstop, focus, shake
         self.jolt = jolt          # pressure-wave kick of a trackside camera at the nose and tail passes
+        # speed ramp (high-speed camera): ramp = (t_sim_start, t_sim_end, playback speed); everything is simulated in
+        # real (sim) time, the edit plays the slow segment back slower, with 0.35 s cosine ramps in and out.
+        # dur = duration on screen, sim_dur = real time covered by the shot.
+        self.sim_dur = dur
+        self.ramp = ramp
+        u = np.linspace(0.0, dur + 1.0, int((dur + 1.0) * 2000) + 1)
+        v = np.ones_like(u)
+        if ramp:
+            a, b, sp = ramp; r = 0.35
+            w = np.clip((u - (a - r)) / r, 0, 1) * np.clip(((b + r) - u) / r, 0, 1)
+            w = 0.5 - 0.5 * np.cos(np.pi * w)
+            v = 1.0 - (1.0 - sp) * w
+        tau = np.concatenate([[0.0], np.cumsum(0.5 * (1 / v[1:] + 1 / v[:-1]) * np.diff(u))])
+        self._u, self._tau, self._v = u, tau, v
+        self.dur = float(np.interp(dur, u, tau))
+
+    def sim(self, tau):
+        """Screen time since the cut -> real (simulation) time."""
+        return float(np.interp(tau, self._tau, self._u)) if np.isscalar(tau) else np.interp(tau, self._tau, self._u)
+
+    def screen(self, t):
+        """Real (simulation) time -> screen time since the cut."""
+        return float(np.interp(t, self._u, self._tau)) if np.isscalar(t) else np.interp(t, self._u, self._tau)
+
+    def speed(self, t):
+        """Playback speed at real time t (1 = real time, 0.25 = four times slower)."""
+        return float(np.interp(t, self._u, self._v))
 
     def s_head(self, t):
         return self.s0 + V * t
@@ -106,7 +133,8 @@ def build_shots():
     shots.append(Shot("S7_cutting_low", 6.0, 4150 - V * 2.7 + 0.0, 20,
                       "Remote low camera in the cess ditch, 3.0 m from the nearest rail, 2.0 m from the car body; pass-by then wake",
                       lambda t, c=c7: c,
-                      lambda t: _rail(4150 - 60, A.track_offset(), 1.6), fstop=2.8, jolt=True))
+                      lambda t: _rail(4150 - 60, A.track_offset(), 1.6), fstop=2.8, jolt=True,
+                      ramp=(2.55, 3.30, 0.25)))           # nose pass at 25 % (a 96 fps high-speed camera)
     # S8 long lens head-on from the hill above the cutting
     c8 = _rail(3905, 72.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 7.0      # north rim of the cutting (on a camera tower), sun behind the lens
     shots.append(Shot("S8_tele", 9.0, 2650.0, 600,
@@ -116,7 +144,8 @@ def build_shots():
     c9 = _rail(A.TUNNEL_S + 9.0, 4.0, 0); c9[2] = _ground_at(c9[0], c9[1]) + 1.7   # on the hill right above the portal
     shots.append(Shot("S9_portal", 6.5, 4450 - V * 2.6, 24,
                       "On the hill above the portal looking down the cutting: the train races at the lens and dives into the mountain beneath it; cut 2 s after the tail is in",
-                      lambda t, c=c9: c, lambda t: _rail(4330, A.track_offset(), 1.0), fstop=8))
+                      lambda t, c=c9: c, lambda t: _rail(4330, A.track_offset(), 1.0), fstop=8,
+                      ramp=(2.35, 3.00, 0.4)))            # the nose dives into the portal at 40 %
     return shots
 
 
@@ -134,7 +163,7 @@ def physics_table(shots):
     rows = []
     for sh, f0, f1 in timeline(shots):
         n = f1 - f0 + 1
-        d = V * sh.dur
+        d = V * sh.sim_dur
         rows.append(dict(shot=sh.name, frames=f"{f0}-{f1}", seconds=sh.dur, speed_kmh=S.SERVICE_SPEED_KMH,
                          speed_ms=round(V, 3), wheel_rps=round(S.WHEEL_REV_PER_S, 2),
                          wheel_deg_per_frame=round(360 * S.WHEEL_REV_PER_S / FPS, 1),

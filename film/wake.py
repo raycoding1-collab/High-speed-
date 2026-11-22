@@ -63,8 +63,9 @@ def simulate(shot, f0, f1, n_leaves=500, n_dust=3200, region=(70, 7.5), seed=3, 
     vel = np.zeros((n, 3))
     dt = 1.0 / (SH.FPS * 8)
     out = []
-    T = (f1 - f0 + 2) / SH.FPS
+    T = shot.sim((f1 - f0 + 2) / SH.FPS)                       # real time covered (longer than the screen time in slow-mo)
     steps = int(T / dt) + 1
+    keep_steps = set(int(round(shot.sim(j / (2.0 * SH.FPS)) / dt)) for j in range(int((f1 - f0 + 2) * 2)))
     noise_state = rng.standard_normal((n, 3))
     for k in range(steps):
         t = k * dt
@@ -85,7 +86,7 @@ def simulate(shot, f0, f1, n_leaves=500, n_dust=3200, region=(70, 7.5), seed=3, 
         pos += vel * dt
         low = pos[:, 2] < gz
         pos[low, 2] = gz[low]; vel[low, 2] = np.maximum(vel[low, 2], 0) * 0.2; vel[low, :2] *= 0.85
-        if k % 4 == 0:                                         # every half frame
+        if k in keep_steps:                                    # every half frame of SCREEN time (speed ramps)
             out.append(pos.copy())
     return np.array(out), kinds
 
@@ -211,7 +212,7 @@ def build_wake_effects(coll, ground_fn):
         cam = np.asarray(sh.cam_fn(0.0))
         s_cam = float(A.nearest_s(cam[0:1], cam[1:2])[0][0])
         t_tail = (s_cam + S.TRAIN_LENGTH - sh.s0) / S.SPEED          # when the tail passes the camera's chainage
-        ft = np.array([f0, f0 + (t_tail + 0.3) * SH.FPS, f0 + (t_tail + 4.0) * SH.FPS, f1 + 1], np.float32)
+        ft = np.array([f0, f0 + sh.screen(t_tail + 0.3) * SH.FPS, f0 + sh.screen(t_tail + 4.0) * SH.FPS, f1 + 1], np.float32)
         ob["fade"] = 1.0
         set_keys(ob, '["fade"]', 0, ft, np.array([1.0, 1.0, 0.15, 0.1], np.float32))
         # visible only during its own shot

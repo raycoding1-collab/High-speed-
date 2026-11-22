@@ -18,13 +18,14 @@ def frame_log():
     off = A.track_offset()
     for sh, f0, f1 in SH.timeline(SH.build_shots()):
         for f in range(f0, f1 + 1):
-            t = (f - f0) / SH.FPS
+            t = sh.sim((f - f0) / SH.FPS)                       # real time (speed ramps play back slower)
             s = sh.s_head(t)
             nose = A.frame(np.array([s]), off)[0][0]
             r = dict(frame=f, shot=sh.name, t=round(t, 3), lens=sh.lens, s_head=round(s, 2),
                      speed_kmh=S.SERVICE_SPEED_KMH, speed_ms=round(S.SPEED, 3),
-                     wheel_rps=round(S.WHEEL_REV_PER_S, 2), wheel_deg_frame=round(360 * S.WHEEL_REV_PER_S / SH.FPS, 1),
-                     blur_m=round(S.SPEED * 0.5 / SH.FPS, 2),
+                     playback=round(sh.speed(t), 3),
+                     wheel_rps=round(S.WHEEL_REV_PER_S, 2), wheel_deg_frame=round(360 * S.WHEEL_REV_PER_S * sh.speed(t) / SH.FPS, 1),
+                     blur_m=round(S.SPEED * 0.5 * sh.speed(t) / SH.FPS, 2),
                      curvature_per_km=round(float(A.curvature(s)) * 1000, 4), cant_mm=round(float(A.cant(s)) * 1000, 1))
             if sh.cam_fn is not None:
                 c0 = np.asarray(sh.cam_fn(t)); c1 = np.asarray(sh.cam_fn(t + 1 / SH.FPS))

@@ -89,7 +89,7 @@ def animate(scene, res, ocs, shots):
     for sh, f0, f1 in tl:
         for f in range(f0, f1 + 1):
             for sub in (0.0, 0.5):
-                t = (f - f0 + sub) / SH.FPS
+                t = sh.sim((f - f0 + sub) / SH.FPS)
                 s_head = sh.s_head(t)
                 frames.append(f + sub); sheads.append(s_head)
                 poses.append(train_pose(res, s_head, t))
@@ -115,7 +115,7 @@ def key_grass_wake(shots):
     for sh, f0, f1 in SH.timeline(shots):
         for f in range(f0, f1 + 1):
             for sub in (0.0, 0.5):
-                frames.append(f + sub); heads.append(sh.s_head((f - f0 + sub) / SH.FPS))
+                frames.append(f + sub); heads.append(sh.s_head(sh.sim((f - f0 + sub) / SH.FPS)))
     frames = np.array(frames, np.float32); heads = np.array(heads)
     for name, amp in (("VegCuttingGrass", 0.9), ("VegHillShrubs", 0.25), ("VegPaddyGrass", 0.0)):
         ob = bpy.data.objects.get(name)
@@ -187,7 +187,7 @@ def make_cameras(scene, shots, res):
             from mathutils import Vector
             for f in range(f0, f1 + 2):
                 for sub in (0.0, 0.5):
-                    t = (f - f0 + sub) / SH.FPS
+                    t = sh.sim((f - f0 + sub) / SH.FPS)
                     pos = sh.cam_fn(t)
                     aim = sh.aim_fn(t) if sh.aim_fn is not None else _train_aim(sh, t)
                     d = Vector(tuple(aim)) - Vector(tuple(pos))
