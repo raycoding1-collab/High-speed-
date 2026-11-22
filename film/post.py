@@ -71,7 +71,9 @@ def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grad
             cb.correction_method = "LIFT_GAMMA_GAIN"
         except Exception:
             pass
-        for nm, v in (("Lift", (0.985, 0.99, 1.02, 1)), ("Gain", (1.04, 1.0, 0.95, 1))):
+        # no lift: the compositor works on scene-linear values, where shadows are ~0.01-0.03, so a +-0.02 lift
+        # (meant for display-referred images) turned every shaded area deep teal. Keep only a gentle warm gain.
+        for nm, v in (("Lift", (1.0, 1.0, 1.0, 1)), ("Gain", (1.03, 1.0, 0.97, 1))):
             for s in cb.inputs:
                 if s.name == nm and s.type == "RGBA":
                     s.default_value = v
