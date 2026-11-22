@@ -902,7 +902,17 @@ def hamlet_sites(n=10, seed=21):
         if any(math.hypot(x - q[2], y - q[3]) < 420 for q in out):
             continue
         out.append((s, lat, x, y))
+    # v3: hamlets placed where the cameras actually look (found by projecting the valley floor into every shot):
+    # S1 aerial, S2 between the piers, S3 drone both sides, S4 behind the train, S8 600 mm background, S9 far end
+    for (fs, fl) in FEATURED_HAMLETS:
+        th = A.heading(fs); x0, y0 = A.xy(fs)
+        x = x0 - math.sin(th) * fl; y = y0 + math.cos(th) * fl
+        out = [q for q in out if math.hypot(x - q[2], y - q[3]) > 260]
+        out.append((fs, fl, x, y))
     return out
+
+
+FEATURED_HAMLETS = [(1500, -400), (1230, -170), (2070, -130), (2130, 170), (2660, 140), (2550, -110), (3480, -120)]
 
 
 def valley_tree_points(rng, hamlets, scale=1.0):

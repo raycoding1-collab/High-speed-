@@ -292,6 +292,8 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     for i, (hs, hl, hx, hy) in enumerate(W.hamlet_sites()):
         W.build_village(cw, assets, n=int(hr.integers(6, 15)), centre_s=hs, lat=hl, seed=40 + i, spread_s=75.0,
                         spread_l=(-60.0, 60.0), name=f"Hamlet{i}", hamlet=True)
+    from . import props as PR
+    PR.build_props(cw, bl.collection("VegSources"), W.hamlet_sites())
 
     log("train")
     ct = bl.collection("Train")
@@ -459,6 +461,13 @@ def build_vegetation(coll, assets, towers, scale=1.0):
             near |= np.hypot(vp[:, 0] - hx, vp[:, 1] - hy) < 12.0
         log("  valley trees removed at houses", int(near.sum()))
         vp = vp[~near]
+    from . import props as PR
+    def clear_of_props(p):
+        k = np.ones(len(p), bool)
+        for (kx, ky, kr) in PR.KEEPOUT:
+            k &= np.hypot(p[:, 0] - kx, p[:, 1] - ky) > kr
+        return k
+    vp = vp[clear_of_props(vp)]
     # crown proxies are mid-distance trees: keep them >= 300 m from ground-level cameras (S2 tripod in the paddies),
     # where their simplified shape would be seen up close
     for sh in SH.build_shots():
@@ -493,6 +502,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         d = np.min(np.hypot(c[:, 0, None] - ax[None, :], c[:, 1, None] - ay[None, :]), axis=1)
         return (W.natural_ground(c[:, 0], c[:, 1]) > 7.0) & (d < 1600.0)
     pts = W.sample_surface([far], 0.02 * scale, rng, massif, max_n=160000, tri_filter=massif_tris)
+    pts = pts[clear_of_props(pts)] if len(pts) else pts
     log("  massif crowns", len(pts))
     W.scatter_tree("VegMassif", coll, pts, crowns, (2.6, 5.8), 8, wind=0.0)
     # grass + weeds right around the S2 camera (paddy edge)
