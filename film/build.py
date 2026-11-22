@@ -140,6 +140,9 @@ def _fcurves(action):
         return out
 
 
+FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 5.5, "S7": 4.2, "S8": "Car1", "S9": 48.0}
+
+
 def make_cameras(scene, shots, res):
     tl = SH.timeline(shots)
     cams = []
@@ -186,7 +189,11 @@ def make_cameras(scene, shots, res):
             ob.location = tuple(locs[0])
         if sh.fstop:
             cd.dof.use_dof = True; cd.dof.aperture_fstop = sh.fstop
-            cd.dof.focus_distance = 50.0
+            foc = FOCUS.get(sh.name[:2], 50.0)
+            if isinstance(foc, str):
+                cd.dof.focus_object = bpy.data.objects[foc]       # focus puller follows the lead car
+            else:
+                cd.dof.focus_distance = foc
         m = scene.timeline_markers.new(sh.name, frame=f0); m.camera = ob
         cams.append(ob)
     scene.camera = cams[0]
@@ -225,11 +232,10 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     tex = tex_paths(assets)
 
     log("sky + haze")
-    W.build_sky(sc, os.path.join(assets, "hdri", "kloppenheim_06_puresky_8k.hdr"))
+    sun, sun_dir = W.build_sky(sc, os.path.join(assets, "hdri", "kloppenheim_06_puresky_8k.hdr"))
     cw = bl.collection("World")
-    W.build_mist_layers(cw)                               # valley mist (layered, physically weighted); aerial haze in compositing
     from . import post
-    post.setup(sc, visibility=7500.0)
+    post.setup(sc, haze_on=False)                         # bloom + grade only; atmosphere is analytic fog in the shaders
 
     log("terrain")
     pimg_path = os.path.join(texdir, "paddies.png")
@@ -275,6 +281,8 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
             ob.cycles.motion_steps = 6
         except Exception:
             pass
+    from . import fog
+    log("atmospheric fog in", fog.apply(sc, sun_dir), "materials")
     sc.render.film_transparent = False
     bpy.ops.file.make_paths_relative() if False else None
     if pack:

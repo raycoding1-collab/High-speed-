@@ -9,7 +9,7 @@ import bpy
 MIST_DEPTH = 20000.0
 
 
-def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grade=True):
+def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grade=True, haze_on=True):
     scene.render.compositor_device = "CPU"           # no GPU on the render machines
     scene.render.compositor_denoise_device = "CPU" if hasattr(scene.render, "compositor_denoise_device") else None
     scene.render.use_compositing = True
@@ -52,7 +52,7 @@ def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grad
     mix = N.new("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MIX"
     mix.inputs["B"].default_value = (*haze, 1.0)
     L(amount, mix.inputs["Factor"]); L(rl.outputs["Image"], mix.inputs["A"])
-    img = mix.outputs["Result"]
+    img = mix.outputs["Result"] if haze_on else rl.outputs["Image"]
     if grade:
         gl = N.new("CompositorNodeGlare")
         try:

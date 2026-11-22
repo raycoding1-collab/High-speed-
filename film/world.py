@@ -168,7 +168,8 @@ def build_terrain(coll, mats):
     strip = new_mesh_object("TerrainCorridor", V, faces, coll, smooth=True, uvs=np.array(uv))
     nat = natural_ground(PX, PY).ravel()
     S2d = np.repeat(ss[:, None], n, 1).ravel(); L2d = np.repeat(lats[None, :], len(ss), 0).ravel()
-    cutm = ((nat > V[:, 2] + 0.3) & (np.abs(L2d) > 7.2) & (S2d > A.VIADUCT[1]) & (S2d < A.TUNNEL_S + 5)).astype(np.float32)
+    cutm = ((nat > V[:, 2] + 0.3) & (np.abs(L2d) > 7.2) & (S2d > A.VIADUCT[1]) & (S2d < A.TUNNEL_S + 5)
+            & (V[:, 2] < A.RAIL_Z + 15.0)).astype(np.float32)
     at = strip.data.attributes.new("cutmask", "FLOAT", "POINT"); at.data.foreach_set("value", cutm)
     strip.data.materials.append(mats["terrain"])
     return far, strip
@@ -317,7 +318,7 @@ def terrain_material(tex, paddy_img):
     L(nor.outputs["Color"], nm.inputs["Color"]); L(nm.outputs[0], p.inputs["Normal"])
     # water in flooded paddies: mirror-like with slight ripples, muddy tint
     wat = nt.nodes.new("ShaderNodeBsdfPrincipled")
-    wat.inputs["Base Color"].default_value = (0.05, 0.045, 0.03, 1); wat.inputs["Roughness"].default_value = 0.18
+    wat.inputs["Base Color"].default_value = (0.04, 0.05, 0.025, 1); wat.inputs["Roughness"].default_value = 0.30
     wat.inputs["IOR"].default_value = 1.33
     wat.inputs["Specular IOR Level"].default_value = 0.42
     rip = nt.nodes.new("ShaderNodeTexNoise"); rip.inputs["Scale"].default_value = 1.2; rip.inputs["Detail"].default_value = 2

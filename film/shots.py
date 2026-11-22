@@ -68,11 +68,11 @@ def build_shots():
     # S5 cab view
     shots.append(Shot("S5_cab", 8.0, 2955.0, 24,
                       "Driver's eye view through the windscreen (2.55 m above rail): masts every 48 m flash past every 0.43 s",
-                      None, None, attach=("Car1", (S.END_FRONT_BOGIE_X + S.TRUCK_CENTRES / 2 - 6.35, 0.0, 2.62)), fstop=4.0, shake=0.004))
+                      None, None, attach=("Car1", (S.END_FRONT_BOGIE_X + S.TRUCK_CENTRES / 2 - 5.85, 0.0, 2.88)), fstop=4.0, shake=0.004))
     # S6 roof camera looking back at the raised pantograph on car 6
     shots.append(Shot("S6_panto", 5.0, 2250.0, 30,
                       "Roof-mounted camera on car 6 looking back at the raised pantograph; contact point slides +-300 mm",
-                      None, None, attach=("Car6", (-4.6, 0.55, 4.55)), fstop=8, shake=0.002))
+                      None, None, attach=("Car6", (5.6, 0.55, 4.45)), fstop=8, shake=0.002))
     # S7 low trackside in the cutting
     c7 = _rail(4150, 6.4, 0.30)        # low remote camera beside the cess, 0.3 m above rail-head height
     shots.append(Shot("S7_cutting_low", 6.0, 4150 - V * 2.7 + 0.0, 20,
@@ -80,7 +80,7 @@ def build_shots():
                       lambda t, c=c7: c,
                       lambda t: _rail(4150 - 60, A.track_offset(), 1.6), fstop=2.8))
     # S8 long lens head-on from the hill above the cutting
-    c8 = _rail(4330, 24, 0); c8[2] = max(_ground_at(c8[0], c8[1]) + 1.8, A.RAIL_Z + 12)
+    c8 = _rail(4330, 42, 0); c8[2] = max(_ground_at(c8[0], c8[1]) + 1.8, A.RAIL_Z + 20)
     shots.append(Shot("S8_tele", 7.0, 2650.0, 600,
                       "600 mm from the hill above the cutting, 1.3-1.9 km away; compressed head-on approach through the curve",
                       lambda t, c=c8: c, lambda t, sh=None: _rail(2650 + V * t - 40, A.track_offset(), 2.2), fstop=8))
