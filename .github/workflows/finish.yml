@@ -44,7 +44,14 @@ jobs:
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
           fr = "${{ inputs.render_frames }}".strip()
-          n = min(int("${{ inputs.jobs }}"), len(fr.split(","))) if fr else 0
+          count = 0
+          for part in fr.split(","):
+              part = part.strip()
+              if "-" in part:
+                  a, b = part.split("-"); count += int(b) - int(a) + 1
+              elif part:
+                  count += 1
+          n = min(int("${{ inputs.jobs }}"), count) if fr else 0
           print("matrix=" + json.dumps(list(range(max(n, 1)))))
           PY
 
