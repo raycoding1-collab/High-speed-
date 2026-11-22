@@ -487,3 +487,38 @@ def build_ocs(coll, s0, s1):
                     pts.append(p)
             tube_mesh(f"{name}{tr}", np.array(pts), rr, coll, 6, blk)
     return res
+
+
+def build_furniture(coll, ground_fn):
+    """Balises between the rails, km/hm posts on the cess/parapet, GSM-R mast beside the line."""
+    from .trainparts import box, setmat, cylinder, join, tube_between
+    yel = M.principled("Balise", (0.75, 0.55, 0.02), 0.0, 0.45)
+    white = M.principled("PostWhite", (0.80, 0.80, 0.78), 0.0, 0.6)
+    galv = M.principled("Galvanised", (0.55, 0.56, 0.57), 1.0, 0.38)
+    objs = []
+    # balises: groups of two, 3 m apart, every ~1.2 km on both tracks (CTCS-3 position references)
+    src = setmat(box("BaliseSrc", (0.52, 0.36, 0.06), (0, 0, -0.14), coll), yel); src.hide_render = True; src.hide_viewport = True
+    ss = np.concatenate([[s, s + 3.0] for s in np.arange(A.S_MIN + 300, A.TUNNEL_S, 1200.0)])
+    for tr in (+1, -1):
+        O, T, N, U = A.frame(ss, tr * S.TRACK_CENTRES / 2)
+        objs.append(instancer(f"Balises{tr}", src, O, matrix_to_euler(T, N, U), coll=coll))
+    # hectometre posts: small white plates on the parapet / cess every 100 m (left side), km posts larger
+    hp = setmat(box("HmSrc", (0.06, 0.30, 0.40), (0, 0, 0.20), coll), white); hp.hide_render = True; hp.hide_viewport = True
+    s_h = np.arange(np.ceil(A.S_MIN / 100) * 100, A.TUNNEL_S, 100.0)
+    O, T, N, U = _frames_flat(s_h)
+    base = O + N * 6.15
+    base[:, 2] = np.where((s_h > A.VIADUCT[0]) & (s_h < A.VIADUCT[1]), A.RAIL_Z - GIRDER_TOP_BELOW_RAIL + 1.15, A.RAIL_Z - 0.85)
+    objs.append(instancer("HmPosts", hp, base, matrix_to_euler(T, N, U), coll=coll))
+    # GSM-R monopole (35 m) with antenna platform, 40 m south of the line near s = 1650
+    O, T, N, U = _frames_flat(np.array([1650.0]))
+    p = O[0] + N[0] * -42.0
+    g = ground_fn(p[0], p[1])
+    parts = [setmat(tube_between("pole", (p[0], p[1], g), (p[0], p[1], g + 36.0), 0.45, coll, 16), galv),
+             setmat(tube_between("pole2", (p[0], p[1], g + 30), (p[0], p[1], g + 40.0), 0.25, coll, 12), galv)]
+    for k in range(3):
+        a = k * 2 * math.pi / 3
+        q = np.array([p[0] + 0.9 * math.cos(a), p[1] + 0.9 * math.sin(a), g + 37.5])
+        parts.append(setmat(box("ant", (0.12, 0.35, 1.6), tuple(q), coll), white))
+    parts.append(setmat(cylinder("plat", 1.3, 0.12, "z", (p[0], p[1], g + 36.4), coll, 16), galv))
+    ob = join(parts, "GSMR_Mast"); coll.objects.link(ob); objs.append(ob)
+    return objs

@@ -1,0 +1,69 @@
+"""Compositing: aerial-perspective haze from the Mist pass, bloom and a gentle golden-hour grade.
+
+Haze: T = exp(-d / V) with visibility V; the sky (mist == 1) is left untouched because the HDRI already
+contains its own horizon haze.  This replaces a kilometre-tall scattering volume (the valley-floor mist
+layer stays a real volume), which halves the path-tracing cost of wide shots.
+"""
+import bpy
+
+MIST_DEPTH = 20000.0
+
+
+def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grade=True):
+    vl = scene.view_layers[0]
+    vl.use_pass_mist = True
+    w = scene.world
+    w.mist_settings.start = 0.0
+    w.mist_settings.depth = MIST_DEPTH
+    w.mist_settings.falloff = "LINEAR"
+    ng = bpy.data.node_groups.new("Post", "CompositorNodeTree")
+    scene.compositing_node_group = ng
+    ng.interface.new_socket("Image", in_out="OUTPUT", socket_type="NodeSocketColor")
+    N = ng.nodes; L = ng.links.new
+    rl = N.new("CompositorNodeRLayers"); rl.scene = scene
+    out = N.new("NodeGroupOutput")
+
+    def math(op, a, b=None):
+        n = N.new("ShaderNodeMath"); n.operation = op
+        for i, v in enumerate((a, b)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                n.inputs[i].default_value = v
+            else:
+                L(v, n.inputs[i])
+        return n.outputs[0]
+    mist = rl.outputs["Mist"]
+    dist_k = math("MULTIPLY", mist, -MIST_DEPTH / visibility)
+    fog = math("SUBTRACT", 1.0, math("EXPONENT", dist_k))
+    sky = math("GREATER_THAN", mist, 0.9995)
+    amount = math("MULTIPLY", math("MULTIPLY", fog, math("SUBTRACT", 1.0, sky)), haze_gain)
+    mix = N.new("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MIX"
+    mix.inputs["B"].default_value = (*haze, 1.0)
+    L(amount, mix.inputs["Factor"]); L(rl.outputs["Image"], mix.inputs["A"])
+    img = mix.outputs["Result"]
+    if grade:
+        gl = N.new("CompositorNodeGlare")
+        try:
+            gl.inputs["Type"].default_value = "Fog Glow"
+        except Exception:
+            try:
+                gl.glare_type = "FOG_GLOW"
+            except Exception:
+                pass
+        for nm, v in (("Threshold", 2.0), ("Strength", 0.12), ("Size", 0.5)):
+            if nm in gl.inputs:
+                gl.inputs[nm].default_value = v
+        L(img, gl.inputs["Image"]); img = gl.outputs["Image"]
+        cb = N.new("CompositorNodeColorBalance")
+        try:
+            cb.correction_method = "LIFT_GAMMA_GAIN"
+        except Exception:
+            pass
+        for nm, v in (("Lift", (0.985, 0.99, 1.02, 1)), ("Gain", (1.04, 1.0, 0.95, 1))):
+            for s in cb.inputs:
+                if s.name == nm and s.type == "RGBA":
+                    s.default_value = v
+        L(img, cb.inputs["Image"]); img = cb.outputs["Image"]
+    L(img, out.inputs["Image"])
+    return ng

@@ -226,7 +226,9 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     log("sky + haze")
     W.build_sky(sc, os.path.join(assets, "hdri", "kloppenheim_06_puresky_8k.hdr"))
     cw = bl.collection("World")
-    W.build_haze(cw)
+    W.build_haze(cw, layers=((0, 24, 0.00062),))        # real volumetric valley mist; aerial haze in compositing
+    from . import post
+    post.setup(sc, visibility=7500.0)
 
     log("terrain")
     pimg_path = os.path.join(texdir, "paddies.png")
@@ -246,6 +248,8 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     infra.build_noise_barriers(ci, 2350.0, 3150.0)
     ocs = infra.build_ocs(ci, A.S_MIN + 30, A.TUNNEL_S + 270)
     build_tunnel(ci, tex)
+    infra.build_furniture(ci, lambda x, y: float(W.natural_ground(np.array([x]), np.array([y]))[0]))
+    W.build_village(cw)
 
     log("train")
     ct = bl.collection("Train")

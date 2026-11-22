@@ -698,3 +698,46 @@ def build_haze(coll, layers=((0, 24, 0.00062), (24, 900, 0.000085)),
         ob.visible_shadow = True
         objs.append(ob)
     return objs
+
+
+def build_village(coll, n=26, centre_s=2700.0, lat=-300.0, seed=4):
+    """Rural Guangxi village: 2-3 storey concrete houses, white tile / grey render, dark tile or flat roofs."""
+    from .trainparts import box, setmat, join
+    rng = np.random.default_rng(seed)
+    wall_m = bpy.data.materials.get("HouseWall")
+    if wall_m is None:
+        wall_m = bpy.data.materials.new("HouseWall"); wall_m.use_nodes = True
+        nt = wall_m.node_tree; p = nt.nodes["Principled BSDF"]; L = nt.links.new
+        geo = nt.nodes.new("ShaderNodeNewGeometry"); sep = nt.nodes.new("ShaderNodeSeparateXYZ"); L(geo.outputs["Position"], sep.inputs[0])
+        # windows: regular grid in world coordinates (3.2 m storey, 3 m bays)
+        def grid(axis, per, width):
+            m1 = nt.nodes.new("ShaderNodeMath"); m1.operation = "PINGPONG"; m1.inputs[1].default_value = per / 2; L(sep.outputs[axis], m1.inputs[0])
+            m2 = nt.nodes.new("ShaderNodeMath"); m2.operation = "LESS_THAN"; m2.inputs[1].default_value = width; L(m1.outputs[0], m2.inputs[0])
+            return m2.outputs[0]
+        wz = grid("Z", 3.2, 0.75); wx = grid("X", 3.0, 0.55); wy = grid("Y", 3.0, 0.55)
+        mx = nt.nodes.new("ShaderNodeMath"); mx.operation = "MAXIMUM"; L(wx, mx.inputs[0]); L(wy, mx.inputs[1])
+        win = nt.nodes.new("ShaderNodeMath"); win.operation = "MULTIPLY"; L(wz, win.inputs[0]); L(mx.outputs[0], win.inputs[1])
+        col = nt.nodes.new("ShaderNodeMix"); col.data_type = "RGBA"
+        col.inputs["A"].default_value = (0.62, 0.60, 0.55, 1); col.inputs["B"].default_value = (0.03, 0.035, 0.04, 1)
+        L(win.outputs[0], col.inputs["Factor"]); L(col.outputs["Result"], p.inputs["Base Color"])
+        rg = nt.nodes.new("ShaderNodeMapRange"); rg.inputs[3].default_value = 0.8; rg.inputs[4].default_value = 0.08
+        L(win.outputs[0], rg.inputs[0]); L(rg.outputs[0], p.inputs["Roughness"])
+    roof_m = bpy.data.materials.get("HouseRoof") or None
+    if roof_m is None:
+        from . import materials as M
+        roof_m = M.principled("HouseRoof", (0.09, 0.085, 0.08), 0.0, 0.7)
+    parts = []
+    cs = centre_s
+    for i in range(n):
+        s = cs + rng.uniform(-260, 260); l = lat + rng.uniform(-120, 90)
+        th = A.heading(s); x0, y0 = A.xy(s)
+        x = x0 - math.sin(th) * l; y = y0 + math.cos(th) * l
+        g = float(natural_ground(np.array([x]), np.array([y]))[0])
+        fl = rng.choice([2, 3, 3, 4]); w = rng.uniform(9, 13); d = rng.uniform(10, 14); h = 3.2 * fl
+        b = setmat(box("house", (w, d, h), (x, y, g + h / 2), coll, 0.0), wall_m)
+        b.rotation_euler = (0, 0, th + rng.choice([0, math.pi / 2]) + rng.uniform(-0.1, 0.1))
+        parts.append(b)
+        r = setmat(box("roof", (w + 0.4, d + 0.4, 0.35), (x, y, g + h + 0.17), coll), roof_m)
+        r.rotation_euler = b.rotation_euler.copy(); parts.append(r)
+    ob = join(parts, "Village"); coll.objects.link(ob)
+    return ob
