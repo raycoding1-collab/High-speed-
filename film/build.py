@@ -515,12 +515,12 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     a2 = np.asarray(sh2.aim_fn(0.0), float)
     bearing = math.atan2(a2[1] - c2[1], a2[0] - c2[0])
     fp = []
-    for ang, dist in ((-31.0, 28.0), (-25.0, 41.0), (32.0, 31.0)):
+    for ang, dist in ((-33.0, 22.0), (-26.0, 34.0), (33.0, 24.0)):
         a = bearing + math.radians(ang)
         x, y = c2[0] + dist * math.cos(a), c2[1] + dist * math.sin(a)
         fp.append((x, y, float(W.natural_ground(np.array([x]), np.array([y]))[0])))
     if trees:
-        W.scatter_tree("VegS2Frame", coll, np.array(fp), trees, (0.95, 1.15), 12, wind=0.03)
+        W.scatter_tree("VegS2Frame", coll, np.array(fp), trees[:3], (1.35, 1.6), 12, wind=0.03)
 
 
 def main():
