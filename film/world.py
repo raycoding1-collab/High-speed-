@@ -908,7 +908,7 @@ def valley_tree_points(rng, hamlets, scale=1.0):
     def add(x, y):
         pts.append(np.column_stack([x, y]))
     # copses scattered over the paddies
-    nc = int(460 * scale)
+    nc = int(650 * scale)
     cx = rng.uniform(-1400, 4400, nc * 3); cy = rng.uniform(-1700, 2300, nc * 3)
     k = _clear_of_features(cx, cy, 25.0); cx, cy = cx[k][:nc], cy[k][:nc]
     for x0, y0 in zip(cx, cy):
@@ -928,7 +928,7 @@ def valley_tree_points(rng, hamlets, scale=1.0):
         m = int(rng.integers(30, 70))
         add(x + rng.normal(0, 55, m), y + rng.normal(0, 55, m))
     # lone trees on field corners
-    nl = int(500 * scale)
+    nl = int(180 * scale)
     add(rng.uniform(-1400, 4400, nl), rng.uniform(-1700, 2300, nl))
     P = np.concatenate(pts)
     keep = _clear_of_features(P[:, 0], P[:, 1], 6.0, river=21.0)      # bank groves stand right at the water
