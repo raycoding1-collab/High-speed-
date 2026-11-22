@@ -1,0 +1,161 @@
+name: finish-film
+
+# Recovery path for a render run that lost a runner: re-render only the missing frames with the SAME
+# packed scene (downloaded from the original run, so they match the other frames exactly), then collect
+# the frames of several runs and encode/commit the film with the same checks as render-film.
+on:
+  workflow_dispatch:
+    inputs:
+      scene_run:
+        description: "run id whose 'scene' artifact (scene.blend, physics.json, audio.wav) is used"
+        required: true
+      render_frames:
+        description: "frames to (re)render here, comma list (empty = render nothing)"
+        default: ""
+      jobs:
+        description: "parallel render jobs for render_frames"
+        default: "20"
+      frame_runs:
+        description: "space-separated run ids whose frames-* artifacts are collected for the encode (this run is added)"
+        default: ""
+      quality:
+        description: "name used for the output files"
+        default: "final"
+      encode:
+        description: "collect + encode + commit"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  PYTHON_VERSION: "3.13.18"
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          fr = "${{ inputs.render_frames }}".strip()
+          n = min(int("${{ inputs.jobs }}"), len(fr.split(","))) if fr else 0
+          print("matrix=" + json.dumps(list(range(max(n, 1)))))
+          PY
+
+  render:
+    needs: plan
+    if: ${{ inputs.render_frames != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        job: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Scene from the original run
+        uses: actions/download-artifact@v4
+        with:
+          name: scene
+          path: build
+          run-id: ${{ inputs.scene_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resume - frames from earlier attempts of this run
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: frames-p${{ matrix.job }}-*
+          path: frames
+          merge-multiple: true
+      - name: Render
+        run: |
+          nproc; lscpu | grep -E "Model name|^CPU\(s\)" || true
+          python tools/render_frames.py --blend build/scene.blend --out frames --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} \
+            --frames "${{ inputs.render_frames }}" --deadline-min 335 --timing frames/timing_p${{ matrix.job }}.json
+      - name: Timing summary
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, glob
+          for f in glob.glob("frames/timing_*.json"):
+              d = json.load(open(f)); s = d["seconds"]
+              if s:
+                  print(f"patch job {d['job']}: frames {d['frames']}, mean {sum(s)/len(s):.1f} s/frame, total {d['total_min']:.1f} min")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frames-p${{ matrix.job }}-a${{ github.run_attempt }}
+          path: frames
+          retention-days: 7
+          compression-level: 0
+
+  encode:
+    needs: [plan, render]
+    if: ${{ always() && inputs.encode && needs.plan.result == 'success' && (needs.render.result == 'success' || needs.render.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg fonts-dejavu-core
+          pip install pillow==13.0.0
+      - name: Scene (audio + physics) from the original run
+        uses: actions/download-artifact@v4
+        with:
+          name: scene
+          path: build
+          run-id: ${{ inputs.scene_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Collect frames from all runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dl frames
+          for r in ${{ inputs.frame_runs }} ${{ github.run_id }}; do
+            echo "run $r:"; gh run download "$r" -R "${{ github.repository }}" -p 'frames-*' -D "dl/$r" || echo "  (no frames artifacts)"
+          done
+          find dl -name 'frame_*.png' -exec mv -n -t frames {} +
+          echo "collected $(ls frames | grep -c '^frame_') frames"; du -sh frames
+      - name: Validate + encode (refuses on missing/incomplete frames)
+        run: |
+          mkdir -p out
+          Q=${{ inputs.quality }}
+          python tools/encode.py --frames frames --first 1 --last 1560 \
+            --audio build/audio.wav --out out/cr450_${Q}.mp4 --ig out/cr450_${Q}_instagram.mp4 --report out/report_${Q}.json
+          cat out/report_${Q}.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: film-${{ inputs.quality }}
+          path: out
+          retention-days: 30
+      - name: Commit film to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p output
+          for f in out/*.mp4; do
+            sz=$(stat -c %s "$f")
+            if [ "$sz" -lt 99000000 ]; then cp "$f" output/; else echo "skip $f ($sz bytes > GitHub 100 MB limit)"; fi
+          done
+          cp out/report_*.json output/
+          git add output
+          git commit -m "Rendered film (${{ inputs.quality }}) from runs ${{ inputs.frame_runs }} ${{ github.run_id }}" || exit 0
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
