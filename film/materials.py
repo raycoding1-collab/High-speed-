@@ -90,7 +90,7 @@ def body_material(name, col_path, dat_path):
     is_ws = nt.nodes.new("ShaderNodeMath"); is_ws.operation = "COMPARE"; is_ws.inputs[1].default_value = 0.5; is_ws.inputs[2].default_value = 0.2
     L(a, is_ws.inputs[0])
     tint = nt.nodes.new("ShaderNodeMix"); tint.data_type = "RGBA"
-    tint.inputs["A"].default_value = (0.10, 0.11, 0.11, 1)   # side windows: privacy tint
+    tint.inputs["A"].default_value = (0.05, 0.055, 0.055, 1)   # side windows: privacy tint (~5 % transmission)
     tint.inputs["B"].default_value = (0.62, 0.70, 0.66, 1)   # windscreen
     L(is_ws.outputs[0], tint.inputs["Factor"])
     tr = nt.nodes.new("ShaderNodeBsdfTransparent"); L(tint.outputs["Result"], tr.inputs[0])

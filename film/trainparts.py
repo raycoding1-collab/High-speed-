@@ -403,7 +403,7 @@ def build_car_interior(name, coll, length, seat_row_mesh, rows_x):
     """Floor, ceiling with light strips, luggage racks, seats.  x along car centred."""
     floor = M.principled("Floor", (0.12, 0.11, 0.10), 0.0, 0.6)
     ceil = M.principled("Ceiling", (0.70, 0.70, 0.68), 0.0, 0.5)
-    light = M.principled("CeilLight", (1, 1, 1), 0.0, 0.5, emission=(1.0, 0.95, 0.88), estrength=6.0)
+    light = M.principled("CeilLight", (1, 1, 1), 0.0, 0.5, emission=(1.0, 0.95, 0.88), estrength=2.0)
     rack = M.principled("Rack", (0.6, 0.6, 0.62), 1.0, 0.3)
     parts = [setmat(box(name + "_floor", (length, 3.0, 0.04), (0, 0, 1.20), coll), floor),
              setmat(box(name + "_ceil", (length, 2.4, 0.04), (0, 0, 3.32), coll), ceil),
