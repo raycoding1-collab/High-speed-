@@ -15,6 +15,8 @@ import modal
 
 GPU = os.environ.get("MODAL_GPU", "L40S")
 MAX_CONTAINERS = int(os.environ.get("MODAL_MAX_CONTAINERS", "10"))
+CPU = float(os.environ.get("MODAL_CPU", "8"))          # scene sync / geometry nodes / BVH build run on the CPU
+MEMORY = int(os.environ.get("MODAL_MEMORY", "16384"))
 
 app = modal.App("cr450-render")
 image = (
@@ -38,7 +40,7 @@ def parse_frames(spec):
 
 
 @app.cls(gpu=GPU, image=image, volumes={"/scene": vol}, max_containers=MAX_CONTAINERS, timeout=3600,
-         cpu=2.0, memory=14336)
+         cpu=CPU, memory=MEMORY)
 class Renderer:
     blend: str = modal.parameter()
     res: str = modal.parameter(default="")
@@ -128,6 +130,10 @@ def main(blend: str, frames: str, out: str, res: str = "", samples: int = 0):
         os.replace(tmp, os.path.join(out, f"frame_{f:05d}.png"))
         timings.append(dict(frame=f, seconds=round(dt, 2), camera=cam, device=dev))
         print(f"[modal] frame {f} ({cam}) {dt:.1f} s on {dev}  [{len(timings)}/{len(todo)}]", flush=True)
+        if len(timings) % 25 == 0:                       # progress line with a running cost estimate
+            el = time.time() - t0
+            print(f"[modal] progress {len(timings)}/{len(todo)} after {el/60:.1f} min, "
+                  f"ETA {el / len(timings) * (len(todo) - len(timings)) / 60:.0f} min", flush=True)
     wall = time.time() - t0
     with open(os.path.join(out, "timing_modal.json"), "w") as fh:
         json.dump(dict(gpu=GPU, containers=MAX_CONTAINERS, wall_s=round(wall, 1), frames=timings, failed=failed), fh, indent=1)

@@ -414,6 +414,14 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     # southern-Chinese farmland. (Evenly scattered single Poly Haven "island" trees read as savanna, so not used here.)
     vp = W.valley_tree_points(rng, W.hamlet_sites(), scale)
     vp = vp[_sightline_mask(vp, 9.0)]
+    # crown proxies are mid-distance trees: keep them >= 300 m from ground-level cameras (S2 tripod in the paddies),
+    # where their simplified shape would be seen up close
+    for sh in SH.build_shots():
+        if sh.attach or sh.cam_fn is None:
+            continue
+        c = np.asarray(sh.cam_fn(0.0), float)
+        if c[2] - W.natural_ground(np.array([c[0]]), np.array([c[1]]))[0] < 6.0:
+            vp = vp[np.hypot(vp[:, 0] - c[0], vp[:, 1] - c[1]) > 300.0]
     log("  valley trees (crown clumps)", len(vp))
     W.scatter_tree("VegValleyCopses", coll, vp, crowns, (2.2, 5.5), 6, wind=0.0)
     # grass + weeds right around the S2 camera (paddy edge)

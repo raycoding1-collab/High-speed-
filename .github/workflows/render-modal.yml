@@ -21,6 +21,9 @@ on:
       max_containers:
         description: "GPUs at once (Modal free plan allows 10)"
         default: "10"
+      cpu:
+        description: "CPU cores per GPU container (scene sync / BVH build)"
+        default: "8"
       commit_stills:
         description: "commit JPG copies of the rendered frames to output/tests/<run>/"
         type: boolean
@@ -108,6 +111,7 @@ jobs:
       MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       MODAL_GPU: ${{ inputs.gpu }}
       MODAL_MAX_CONTAINERS: ${{ inputs.max_containers }}
+      MODAL_CPU: ${{ inputs.cpu }}
       SCENE_NAME: scene-${{ github.run_id }}.blend
     steps:
       - uses: actions/checkout@v4
