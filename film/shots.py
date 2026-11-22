@@ -96,11 +96,18 @@ def pressure_jolt(sh, t, s_cam):
 def build_shots():
     shots = []
     # S1 establishing aerial: drone 700 m south of the viaduct, drifting east at 6 m/s
-    c1 = _rail(1500, -720, 70)
+    # (v3) the drone starts low over the hamlet south of the line (roofs, orchards, ponds pass below), flies north
+    # at 14 m/s and tilts up from the village to the viaduct as the train crosses the valley
+    def _s1_cam(t):
+        return _rail(1500 + 2.0 * t, -560 + 14.0 * t, 20 - 0.5 * t)
+    def _s1_aim(t, sh=None):
+        w = 0.5 - 0.5 * math.cos(math.pi * min(max((t - 1.0) / 4.0, 0.0), 1.0))     # village -> viaduct pan
+        village = _rail(1505 + 2.0 * t, -430 + 14.0 * t, -26.0)
+        line = _rail(1560 + 9 * t, 40, 6)
+        return village * (1 - w) + line * w
     shots.append(Shot("S1_aerial", 8.0, 1040.0, 40,
-                      "Drone 700 m south, 100 m up, drifting east at 6 m/s; train crosses the valley on the viaduct",
-                      lambda t, c=c1: c + np.array([6.0 * t, 0, -0.6 * t]),
-                      lambda t, sh=None: _rail(1560 + 9 * t, 40, 20), fstop=8))
+                      "Drone 45 m over the hamlet south of the line, flying north at 14 m/s and tilting up from the village to the viaduct as the train crosses the valley",
+                      _s1_cam, _s1_aim, fstop=8))
     # S2 paddy-level, tripod 45 m south of the deck edge next to a pier, looking up
     c2 = _rail(986, 60, 0); c2[2] = _ground_at(c2[0], c2[1]) + 1.55      # north side = the near (left-running) track
     shots.append(Shot("S2_paddy_low", 5.0, 986 - V * 2.4 + 105, 24,
@@ -110,7 +117,7 @@ def build_shots():
     shots.append(Shot("S3_drone", 7.0, 1650 - 300, 24,
                       "Drone flying alongside at its 26 m/s maximum; the train overtakes at 85 m/s relative and leaves it behind",
                       lambda t: _rail(1650 + 26 * t, -24, 12),
-                      None, fstop=4.0))
+                      None, fstop=4.0, ramp=(3.1, 4.3, 0.4)))     # the overtake at 40 %
     # S4 helicopter chase at 70 m/s (AS350 cruise), 160 m off and only 7 m above the deck, 135 mm on a gimbal:
     # a long-lens panning shot whose background is the far side of the valley (hamlets, groves, orchards, the
     # karst towers) streaking past, like real helicopter footage of high-speed trains
@@ -127,7 +134,8 @@ def build_shots():
     # S6 roof camera looking back at the raised pantograph on car 6
     shots.append(Shot("S6_panto", 5.0, 2250.0, 30,
                       "Roof-mounted camera on car 6 looking back at the raised pantograph; contact point slides +-300 mm",
-                      None, None, attach=("Car6", (9.5, -1.15, 4.75)), fstop=8, shake=0.002))
+                      None, None, attach=("Car6", (9.5, -1.15, 4.75)), fstop=8, shake=0.002,
+                      ramp=(1.4, 3.0, 0.5)))                      # contact wire zig-zag and uplift at 50 %
     # S7 low trackside in the cutting
     c7 = _rail(4150, 6.4, 0.30)        # low remote camera beside the cess, 0.3 m above rail-head height
     shots.append(Shot("S7_cutting_low", 6.0, 4150 - V * 2.7 + 0.0, 20,
