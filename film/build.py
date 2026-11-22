@@ -233,8 +233,7 @@ def _train_aim(sh, t):
         w = np.clip((sh.s_head(t) - (1650 + 26 * t) + 60) / 120, 0, 1)
         return ahead * (1 - w) + nose * w
     if sh.name.startswith("S4"):
-        along = 105 - 13 * t
-        return A.frame(np.array([sh.s_head(t) - along]), off)[0][0] + np.array([0, 0, 2.0])
+        return A.frame(np.array([sh.s_head(t) - 14.0]), off)[0][0] + np.array([0, 0, 2.0])   # gimbal locked on the nose
     return A.frame(np.array([sh.s_head(t)]), off)[0][0]
 
 

@@ -87,9 +87,11 @@ def build_shots():
     # S4 helicopter chase at 70 m/s (AS350 cruise), 160 m off and only 7 m above the deck, 135 mm on a gimbal:
     # a long-lens panning shot whose background is the far side of the valley (hamlets, groves, orchards, the
     # karst towers) streaking past, like real helicopter footage of high-speed trains
-    shots.append(Shot("S4_heli", 9.0, 2080.0, 135,
-                      "Helicopter at 70 m/s (252 km/h) paralleling the line just above deck height; the 400 km/h train slowly pulls away",
-                      lambda t: _rail(2080 - 120 + 70 * t, -160, 7),
+    # (v3) it flies ahead of the train on the north side and looks back, so the low morning sun is behind the lens
+    # (sun 120-175 deg from the view direction): the nose is front-lit while it closes from 440 m to 160 m
+    shots.append(Shot("S4_heli", 9.0, 1560.0, 135,
+                      "Helicopter at 70 m/s (252 km/h) ahead of the train just above deck height, looking back: the 400 km/h train closes in from 440 m",
+                      lambda t: _rail(1960 + 70 * t, 160, 7),
                       None, fstop=5.6, shake=0.08))
     # S5 cab view
     shots.append(Shot("S5_cab", 8.0, 2955.0, 24,
