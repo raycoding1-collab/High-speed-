@@ -410,27 +410,11 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     pts = W.sample_surface([strip], 8.0 * scale, rng, slope_near(3900, 4520, 6.6, clear=False), max_n=320000)
     log("  cutting grass", len(pts))
     W.scatter_tree("VegCuttingGrass", coll, pts, grasses, (0.8, 1.6), 4, wind=0.10)
-    # valley: tree lines and shrubs along field edges near the viaduct (S1/S2/S3)
-    def valley(p, n):
-        s, lat = A.nearest_s(p[:, 0], p[:, 1])
-        return ((p[:, 2] < 6) & (np.abs(lat) > 14) & (np.abs(lat) < 400) & (s > 600) & (s < 2600)
-                & W._clear_of_features(p[:, 0], p[:, 1], 4.0) & _sightline_mask(p, 9.0))
-    def near_zone(c):
-        # restrict the triangles to the near-viaduct box first (the point budget used to be spent on the whole 114 km2)
-        s, lat = A.nearest_s(c[:, 0], c[:, 1])
-        return (np.abs(lat) < 420) & (s > 560) & (s < 2640)
-    pts = W.sample_surface([far], 0.0012 * scale, rng, valley, max_n=60000, tri_filter=near_zone)
-    log("  valley trees (near)", len(pts))
-    W.scatter_tree("VegValleyTrees", coll, pts, trees, (0.8, 1.4), 5, wind=0.03)
-    pts = W.sample_surface([far], 0.0016 * scale, rng, valley, max_n=80000, tri_filter=near_zone)
-    log("  valley shrubs (near)", len(pts))
-    W.scatter_tree("VegValleyShrubs", coll, pts, shrubs, (1.2, 2.2), 7, wind=0.05)
-    # copses, river lines, hamlet groves and lone trees over the whole valley floor (crown proxies)
+    # valley floor: dense green tree clumps (copses, river lines, hamlet groves) and a few lone trees, like real
+    # southern-Chinese farmland. (Evenly scattered single Poly Haven "island" trees read as savanna, so not used here.)
     vp = W.valley_tree_points(rng, W.hamlet_sites(), scale)
-    s_v, l_v = A.nearest_s(vp[:, 0], vp[:, 1])
-    far_only = ~((np.abs(l_v) < 420) & (s_v > 560) & (s_v < 2640)) & _sightline_mask(vp, 8.0)
-    vp = vp[far_only]
-    log("  valley copses (crowns)", len(vp))
+    vp = vp[_sightline_mask(vp, 9.0)]
+    log("  valley trees (crown clumps)", len(vp))
     W.scatter_tree("VegValleyCopses", coll, vp, crowns, (2.2, 5.5), 6, wind=0.0)
     # grass + weeds right around the S2 camera (paddy edge)
     c2 = [s for s in SH.build_shots() if s.name.startswith("S2")][0].cam_fn(0)
