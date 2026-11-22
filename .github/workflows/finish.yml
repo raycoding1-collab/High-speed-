@@ -131,7 +131,8 @@ jobs:
           for r in ${{ inputs.frame_runs }} ${{ github.run_id }}; do
             echo "run $r:"; gh run download "$r" -R "${{ github.repository }}" -p 'frames-*' -D "dl/$r" || echo "  (no frames artifacts)"
           done
-          find dl -name 'frame_*.png' -exec mv -n -t frames {} +
+          # keep the first copy of a frame that exists in several runs (mv -n exits 1 on a skip in coreutils 9.4)
+          find dl -name 'frame_*.png' | while read -r f; do b=$(basename "$f"); [ -e "frames/$b" ] || mv "$f" "frames/$b"; done
           echo "collected $(ls frames | grep -c '^frame_') frames"; du -sh frames
       - name: Validate + encode (refuses on missing/incomplete frames)
         run: |
