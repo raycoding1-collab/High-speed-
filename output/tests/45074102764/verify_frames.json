@@ -1,0 +1,85 @@
+{
+ "frames": [
+  {
+   "file": "frame_00096.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.482,
+   "shadow_teal": -3.4,
+   "pass": true
+  },
+  {
+   "file": "frame_00252.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.567,
+   "shadow_teal": -8.6,
+   "pass": true
+  },
+  {
+   "file": "frame_00396.png",
+   "clip_pct": 0.01,
+   "crush_pct": 0.0,
+   "mean_luma": 0.52,
+   "shadow_teal": -0.5,
+   "pass": true
+  },
+  {
+   "file": "frame_00588.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.515,
+   "shadow_teal": -13.1,
+   "pass": true
+  },
+  {
+   "file": "frame_00792.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.55,
+   "mean_luma": 0.373,
+   "shadow_teal": 7.1,
+   "pass": true
+  },
+  {
+   "file": "frame_00948.png",
+   "clip_pct": 0.12,
+   "crush_pct": 0.0,
+   "mean_luma": 0.541,
+   "shadow_teal": 2.4,
+   "pass": true
+  },
+  {
+   "file": "frame_01076.png",
+   "clip_pct": 0.0,
+   "crush_pct": 1.87,
+   "mean_luma": 0.333,
+   "shadow_teal": 3.9,
+   "pass": true
+  },
+  {
+   "file": "frame_01080.png",
+   "clip_pct": 0.0,
+   "crush_pct": 1.81,
+   "mean_luma": 0.332,
+   "shadow_teal": 3.7,
+   "pass": true
+  },
+  {
+   "file": "frame_01260.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.508,
+   "shadow_teal": -5.4,
+   "pass": true
+  },
+  {
+   "file": "frame_01446.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.299,
+   "shadow_teal": 6.9,
+   "pass": true
+  }
+ ],
+ "result": "PASS"
+}
