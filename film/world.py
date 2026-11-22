@@ -273,10 +273,10 @@ def terrain_material(tex, paddy_img):
     pz2 = nt.nodes.new("ShaderNodeMath"); pz2.operation = "MULTIPLY"; L(pz.outputs[0], pz2.inputs[0]); L(pimg.outputs["Alpha"], pz2.inputs[1])
     # rice colour: young green to yellow-green by field variation
     rice = nt.nodes.new("ShaderNodeValToRGB")
-    rice.color_ramp.elements[0].color = (0.075, 0.15, 0.028, 1); rice.color_ramp.elements[1].color = (0.11, 0.19, 0.035, 1)
-    rice.color_ramp.elements.new(0.55).color = (0.09, 0.17, 0.03, 1)
+    rice.color_ramp.elements[0].color = (0.055, 0.15, 0.018, 1); rice.color_ramp.elements[1].color = (0.10, 0.22, 0.025, 1)
+    rice.color_ramp.elements.new(0.55).color = (0.075, 0.19, 0.02, 1)
     L(field_var, rice.inputs[0])
-    ripe = nt.nodes.new("ShaderNodeMix"); ripe.data_type = "RGBA"; ripe.inputs["B"].default_value = (0.17, 0.20, 0.05, 1)
+    ripe = nt.nodes.new("ShaderNodeMix"); ripe.data_type = "RGBA"; ripe.inputs["B"].default_value = (0.14, 0.19, 0.035, 1)
     L(is_ripe, ripe.inputs["Factor"]); L(rice.outputs[0], ripe.inputs["A"])
     fallow = nt.nodes.new("ShaderNodeMix"); fallow.data_type = "RGBA"
     L(is_fallow, fallow.inputs["Factor"]); L(ripe.outputs["Result"], fallow.inputs["A"]); L(mud.outputs["Color"], fallow.inputs["B"])
@@ -297,7 +297,7 @@ def terrain_material(tex, paddy_img):
     # paddy: rice vs water vs dikes
     pad = nt.nodes.new("ShaderNodeMix"); pad.data_type = "RGBA"
     dk = nt.nodes.new("ShaderNodeMath"); dk.operation = "POWER"; dk.inputs[1].default_value = 0.6; L(dike, dk.inputs[0])
-    pad.inputs["B"].default_value = (0.20, 0.21, 0.09, 1)
+    pad.inputs["B"].default_value = (0.11, 0.12, 0.05, 1)
     L(dk.outputs[0], pad.inputs["Factor"]); L(ricem.outputs["Result"], pad.inputs["A"])
     allc = nt.nodes.new("ShaderNodeMix"); allc.data_type = "RGBA"
     L(pz2.outputs[0], allc.inputs["Factor"]); L(rk.outputs["Result"], allc.inputs["A"]); L(pad.outputs["Result"], allc.inputs["B"])
@@ -424,7 +424,7 @@ def paddy_image(path, res=1.0, seed=3):
         row = np.floor(v / bw[b]); fu = u + row * 17.3            # stagger field ends between rows
         col = np.floor(fu / bl[b])
         fv = v / bw[b] - row; fu2 = fu / bl[b] - col
-        edge = block_edge | (np.minimum(fv, 1 - fv) * bw[b] < 0.45) | (np.minimum(fu2, 1 - fu2) * bl[b] < 0.45)
+        edge = block_edge | (np.minimum(fv, 1 - fv) * bw[b] < 0.32) | (np.minimum(fu2, 1 - fu2) * bl[b] < 0.32)
         h = (b * 73856093 ^ (row.astype(np.int64) * 19349663) ^ (col.astype(np.int64) * 83492791)) & 0xFFFF
         var = (h % 997) / 996.0
         tsel = np.searchsorted(np.cumsum(probs), (h % 1009) / 1008.0)

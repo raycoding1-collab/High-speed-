@@ -91,7 +91,7 @@ def set_cycles(scene, samples=64, denoise=True):
     scene.render.film_transparent = False
     scene.view_settings.view_transform = "AgX"
     try:
-        scene.view_settings.look = "AgX - Medium High Contrast"
+        scene.view_settings.look = "AgX - Base Contrast"
     except TypeError:
         scene.view_settings.look = "None"
 

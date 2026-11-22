@@ -80,7 +80,7 @@ def build_shots():
                       lambda t, c=c7: c,
                       lambda t: _rail(4150 - 60, A.track_offset(), 1.6), fstop=2.8))
     # S8 long lens head-on from the hill above the cutting
-    c8 = _rail(3905, 72.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 1.8      # north rim of the cutting, sun behind the lens
+    c8 = _rail(3905, 72.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 7.0      # north rim of the cutting (on a camera tower), sun behind the lens
     shots.append(Shot("S8_tele", 7.0, 2650.0, 600,
                       "600 mm from the north rim of the cutting, 0.5-1.3 km away; compressed head-on approach out of the curve",
                       lambda t, c=c8: c, lambda t, sh=None: _rail(2650 + V * t - 40, A.track_offset(), 2.2), fstop=8))
