@@ -10,6 +10,9 @@ MIST_DEPTH = 20000.0
 
 
 def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grade=True):
+    scene.render.compositor_device = "CPU"           # no GPU on the render machines
+    scene.render.compositor_denoise_device = "CPU" if hasattr(scene.render, "compositor_denoise_device") else None
+    scene.render.use_compositing = True
     vl = scene.view_layers[0]
     vl.use_pass_mist = True
     w = scene.world
@@ -33,10 +36,18 @@ def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grad
             else:
                 L(v, n.inputs[i])
         return n.outputs[0]
-    mist = rl.outputs["Mist"]
+    # the Mist pass is not denoised by Cycles: run it through OIDN so the haze does not inherit sample noise
+    cc = N.new("CompositorNodeCombineColor")
+    for i in range(3):
+        L(rl.outputs["Mist"], cc.inputs[i])
+    dn = N.new("CompositorNodeDenoise")
+    L(cc.outputs[0], dn.inputs["Image"])
+    sep = N.new("CompositorNodeSeparateColor"); L(dn.outputs[0], sep.inputs[0])
+    mist = sep.outputs[0]
+    mist_raw = rl.outputs["Mist"]
     dist_k = math("MULTIPLY", mist, -MIST_DEPTH / visibility)
     fog = math("SUBTRACT", 1.0, math("EXPONENT", dist_k))
-    sky = math("GREATER_THAN", mist, 0.9995)
+    sky = math("GREATER_THAN", mist_raw, 0.9995)
     amount = math("MULTIPLY", math("MULTIPLY", fog, math("SUBTRACT", 1.0, sky)), haze_gain)
     mix = N.new("ShaderNodeMix"); mix.data_type = "RGBA"; mix.blend_type = "MIX"
     mix.inputs["B"].default_value = (*haze, 1.0)

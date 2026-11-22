@@ -82,7 +82,7 @@ def set_cycles(scene, samples=64, denoise=True):
     cy.diffuse_bounces = 2
     cy.glossy_bounces = 2
     cy.transmission_bounces = 4
-    cy.transparent_max_bounces = 10
+    cy.transparent_max_bounces = 28
     cy.ao_bounces_render = 2
     cy.volume_bounces = 0
     cy.caustics_reflective = False

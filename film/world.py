@@ -15,6 +15,7 @@ from . import specs as S
 from .bl import new_mesh_object, grid_faces
 
 RNG_SEED = 7
+CORRIDOR_S0 = 3300.0      # dense corridor terrain only where the earthworks are (viaduct section uses the far grid)
 
 # karst towers (x, y, height, base radius) - placed off the line, layered for depth
 TOWERS = [
@@ -88,7 +89,7 @@ def natural_ground(x, y):
     massif = 165 * np.clip(1 - (d / 760) ** 2.0, 0, 1) ** 0.75 + 22 * _noise2(x, y, 60, 3) * np.clip(1 - d / 800, 0, 1)
     # foothills rising above rail level from ~s=3850 so the line runs in a cutting before the tunnel
     rise = np.clip((x - 3450) / 550, 0, 1) ** 1.3 * 44 * (1 + 0.25 * _noise2(x, y, 250, 4))
-    return np.maximum(valley + rise + river_depression(x, y), massif)
+    return 1.2 + valley + rise + river_depression(x, y) + massif
 
 
 def formation(s, lat, g):
@@ -123,7 +124,8 @@ def ground(x, y):
 def build_terrain(coll, mats):
     """Far terrain grid (hole along the corridor) + dense corridor strip."""
     # far grid
-    xs = np.arange(-4000, 8000.1, 30.0); ys = np.arange(-4500, 5000.1, 30.0)
+    xs = np.concatenate([np.arange(-4000, -300, 30.0), np.arange(-300, 3600, 12.0), np.arange(3600, 8000.1, 30.0)])
+    ys = np.concatenate([np.arange(-4500, -900, 30.0), np.arange(-900, 900, 12.0), np.arange(900, 5000.1, 30.0)])
     X, Y = np.meshgrid(xs, ys, indexing="xy")
     Z = natural_ground(X, Y)
     s, lat = A.nearest_s(X.ravel(), Y.ravel())
@@ -131,7 +133,7 @@ def build_terrain(coll, mats):
     V = np.stack([X, Y, Z], -1).reshape(-1, 3)
     ny, nx = X.shape
     faces = []
-    inside = (np.abs(lat) < 150) & (s > A.S_MIN + 10) & (s < A.S_MAX - 10)
+    inside = (np.abs(lat) < 150) & (s > CORRIDOR_S0 + 10) & (s < A.S_MAX - 10)
     for j in range(ny - 1):
         for i in range(nx - 1):
             if inside[j, i] and inside[j + 1, i + 1] and inside[j, i + 1] and inside[j + 1, i]:
@@ -143,7 +145,7 @@ def build_terrain(coll, mats):
     # corridor strip
     lats = np.array(sorted(set(np.round(np.concatenate([
         -np.geomspace(6.0, 160, 34), np.geomspace(6.0, 160, 34), np.linspace(-5.5, 5.5, 8)]), 3))))
-    ss = np.arange(A.S_MIN + 5, A.S_MAX - 5, 2.0)
+    ss = np.arange(CORRIDOR_S0, A.S_MAX - 5, 2.0)
     th = A.heading(ss); cx, cy = A.xy(ss)
     PX = cx[:, None] - np.sin(th)[:, None] * lats[None, :]
     PY = cy[:, None] + np.cos(th)[:, None] * lats[None, :]
@@ -288,7 +290,8 @@ def terrain_material(tex, paddy_img):
     # paddy: rice vs water vs dikes
     pad = nt.nodes.new("ShaderNodeMix"); pad.data_type = "RGBA"
     dk = nt.nodes.new("ShaderNodeMath"); dk.operation = "POWER"; dk.inputs[1].default_value = 0.6; L(dike, dk.inputs[0])
-    L(dk.outputs[0], pad.inputs["Factor"]); L(ricem.outputs["Result"], pad.inputs["A"]); L(grass.outputs["Result"], pad.inputs["B"])
+    pad.inputs["B"].default_value = (0.20, 0.21, 0.09, 1)
+    L(dk.outputs[0], pad.inputs["Factor"]); L(ricem.outputs["Result"], pad.inputs["A"])
     allc = nt.nodes.new("ShaderNodeMix"); allc.data_type = "RGBA"
     L(pz2.outputs[0], allc.inputs["Factor"]); L(rk.outputs["Result"], allc.inputs["A"]); L(pad.outputs["Result"], allc.inputs["B"])
     # diamond lattice concrete frames (slope protection) on cut slopes: uses UV = (chainage, lateral)
@@ -385,32 +388,42 @@ PADDY_X0, PADDY_Y0, PADDY_W, PADDY_H = -1500.0, -1500.0, 6000.0, 3500.0
 
 
 def paddy_image(path, res=1.0, seed=3):
-    """Field layout map from jittered Voronoi cells (fields ~15-40 m), stretched along the valley.
-    R = per-field variation, G = dike mask, B = field type (0 rice, .33 ripening, .66 flooded, 1 fallow), A = 1."""
+    """Paddy layout: ~200 m blocks (coarse Voronoi), each with its own orientation, subdivided into parallel
+    field strips 10-28 m wide and 25-70 m long.  R = per-field variation, G = dike mask, B = field type
+    (0 rice, .33 ripening, .66 flooded, 1 fallow), A = 1."""
     from PIL import Image, ImageFilter
     from scipy.spatial import cKDTree
     W = int(PADDY_W / res); H = int(PADDY_H / res)
     rng = np.random.default_rng(seed)
-    n = int(PADDY_W * PADDY_H / (26.0 * 18.0))
-    seeds = np.column_stack([rng.uniform(0, W, n), rng.uniform(0, H, n)])
-    stretch = np.array([0.62, 1.0])                       # fields elongated along x
-    tree = cKDTree(seeds * stretch)
-    ft = rng.choice([0.0, 0.33, 0.66, 1.0], n, p=[0.70, 0.22, 0.05, 0.03])
-    var = rng.uniform(0, 1, n)
+    nb = int(PADDY_W * PADDY_H / (210.0 * 170.0))
+    bseeds = np.column_stack([rng.uniform(0, W, nb), rng.uniform(0, H, nb)])
+    tree = cKDTree(bseeds)
+    bang = rng.normal(np.radians(8), np.radians(25), nb)
+    bw = rng.uniform(10, 28, nb); bl = rng.uniform(25, 70, nb)
     R = np.zeros((H, W), np.uint8); G = np.zeros((H, W), np.uint8); B = np.zeros((H, W), np.uint8)
-    for y0 in range(0, H, 500):
-        ys = np.arange(y0, min(H, y0 + 500))
+    types = np.array([0.0, 0.33, 0.66, 1.0]); probs = [0.74, 0.20, 0.04, 0.02]
+    for y0 in range(0, H, 400):
+        ys = np.arange(y0, min(H, y0 + 400))
         xx, yy = np.meshgrid(np.arange(W) + 0.5, ys + 0.5)
-        # warp coordinates slightly so boundaries are not straight
-        wx = xx + 6 * np.sin(yy / 23.0) + 3 * np.sin(xx / 11.0 + yy / 17.0)
-        wy = yy + 5 * np.sin(xx / 29.0) + 2 * np.sin(yy / 7.0)
-        d, idx = tree.query(np.column_stack([wx.ravel() * stretch[0], wy.ravel() * stretch[1]]), k=2)
-        edge = (d[:, 1] - d[:, 0]) < 0.9
-        idx0 = idx[:, 0]
-        R[ys] = (var[idx0] * 255).reshape(len(ys), W)
-        B[ys] = (ft[idx0] * 255).reshape(len(ys), W)
+        wx = xx + 9 * np.sin(yy / 61.0) + 4 * np.sin(xx / 37.0)
+        wy = yy + 8 * np.sin(xx / 53.0) + 3 * np.sin(yy / 29.0)
+        d, idx = tree.query(np.column_stack([wx.ravel(), wy.ravel()]), k=2)
+        b = idx[:, 0]
+        block_edge = (d[:, 1] - d[:, 0]) < 1.2
+        ca, sa = np.cos(bang[b]), np.sin(bang[b])
+        u = wx.ravel() * ca + wy.ravel() * sa
+        v = -wx.ravel() * sa + wy.ravel() * ca
+        row = np.floor(v / bw[b]); fu = u + row * 17.3            # stagger field ends between rows
+        col = np.floor(fu / bl[b])
+        fv = v / bw[b] - row; fu2 = fu / bl[b] - col
+        edge = block_edge | (np.minimum(fv, 1 - fv) * bw[b] < 0.45) | (np.minimum(fu2, 1 - fu2) * bl[b] < 0.45)
+        h = (b * 73856093 ^ (row.astype(np.int64) * 19349663) ^ (col.astype(np.int64) * 83492791)) & 0xFFFF
+        var = (h % 997) / 996.0
+        tsel = np.searchsorted(np.cumsum(probs), (h % 1009) / 1008.0)
+        R[ys] = (var * 255).reshape(len(ys), W)
+        B[ys] = (types[np.clip(tsel, 0, 3)] * 255).reshape(len(ys), W)
         G[ys] = (edge * 255).reshape(len(ys), W)
-    g = Image.fromarray(G).filter(ImageFilter.GaussianBlur(0.7))
+    g = Image.fromarray(G).filter(ImageFilter.GaussianBlur(0.45))
     img = Image.merge("RGBA", (Image.fromarray(R), g, Image.fromarray(B), Image.fromarray(np.full((H, W), 255, np.uint8))))
     img = img.transpose(Image.FLIP_TOP_BOTTOM)
     img.save(path)
@@ -430,7 +443,7 @@ def build_river(coll):
     for k in range(len(t)):
         for f in (-1, 1):
             px, py = xr[k] + nx[k] * f * width[k] / 2, yr[k] + ny[k] * f * width[k] / 2
-            V.append((px, py, -1.9))
+            V.append((px, py, -0.6))
     faces = [(2 * k, 2 * k + 1, 2 * k + 3, 2 * k + 2) for k in range(len(t) - 1)]
     faces = [(a, d, c, b) for (a, b, c, d) in faces]      # counter-clockwise from above -> normals up
     ob = new_mesh_object("River", np.array(V), faces, coll, smooth=True)
@@ -674,7 +687,7 @@ def build_sky(scene, hdri_path, sun_azimuth_deg=262.0, exposure=0.0, strength=0.
     return sun, sun_dir
 
 
-def build_haze(coll, layers=((0, 24, 0.00062), (24, 900, 0.000085)),
+def build_haze(coll, layers=((-12, 24, 0.00062), (24, 900, 0.000085)),
                extent=((-5000, 9000), (-5000, 6000)), color=(0.85, 0.86, 0.90)):
     """Stacked homogeneous scattering layers (analytic in Cycles): exponential-like haze + valley mist."""
     objs = []
@@ -741,3 +754,125 @@ def build_village(coll, n=26, centre_s=2700.0, lat=-300.0, seed=4):
         r.rotation_euler = b.rotation_euler.copy(); parts.append(r)
     ob = join(parts, "Village"); coll.objects.link(ob)
     return ob
+
+
+def rice_clump(name, coll, seed=0):
+    """One transplanted rice hill: ~18 arching blades 0.6-0.9 m, green with yellowing tips."""
+    rng = np.random.default_rng(seed)
+    verts, faces = [], []
+    for b in range(18):
+        az = rng.uniform(0, 2 * np.pi); lean = rng.uniform(0.15, 0.55); h = rng.uniform(0.6, 0.9)
+        w = rng.uniform(0.008, 0.013); bend = rng.uniform(0.2, 0.6)
+        base = len(verts)
+        for k in range(6):
+            f = k / 5
+            r = lean * f * h + bend * f * f * 0.25
+            z = h * (f - 0.35 * bend * f * f)
+            cx, cy = r * math.cos(az), r * math.sin(az)
+            ww = w * (1 - 0.85 * f)
+            px, py = -math.sin(az) * ww, math.cos(az) * ww
+            verts += [(cx - px, cy - py, z), (cx + px, cy + py, z)]
+        for k in range(5):
+            a = base + 2 * k
+            faces.append((a, a + 1, a + 3, a + 2))
+    ob = new_mesh_object(name, np.array(verts), faces, coll, smooth=True)
+    m = bpy.data.materials.get("RiceBlade")
+    if m is None:
+        m = bpy.data.materials.new("RiceBlade"); m.use_nodes = True
+        nt = m.node_tree; p = nt.nodes["Principled BSDF"]; L = nt.links.new
+        geo = nt.nodes.new("ShaderNodeNewGeometry"); sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+        oi = nt.nodes.new("ShaderNodeObjectInfo")
+        tc = nt.nodes.new("ShaderNodeTexCoord"); sp2 = nt.nodes.new("ShaderNodeSeparateXYZ"); L(tc.outputs["Object"], sp2.inputs[0])
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        ramp.color_ramp.elements[0].color = (0.07, 0.16, 0.02, 1); ramp.color_ramp.elements[1].color = (0.42, 0.42, 0.10, 1)
+        ramp.color_ramp.elements.new(0.65).color = (0.17, 0.32, 0.04, 1)
+        mr = nt.nodes.new("ShaderNodeMapRange"); mr.inputs[1].default_value = 0.0; mr.inputs[2].default_value = 0.95
+        L(sp2.outputs["Z"], mr.inputs[0]); L(mr.outputs[0], ramp.inputs[0])
+        hs = nt.nodes.new("ShaderNodeHueSaturation"); L(ramp.outputs[0], hs.inputs["Color"])
+        mv = nt.nodes.new("ShaderNodeMath"); mv.operation = "MULTIPLY_ADD"; mv.inputs[1].default_value = 0.3; mv.inputs[2].default_value = 0.85
+        L(oi.outputs["Random"], mv.inputs[0]); L(mv.outputs[0], hs.inputs["Value"])
+        L(hs.outputs["Color"], p.inputs["Base Color"])
+        p.inputs["Roughness"].default_value = 0.45; p.inputs["Subsurface Weight"].default_value = 0.0
+        p.inputs["Transmission Weight"].default_value = 0.0
+        p.inputs["Sheen Weight"].default_value = 0.2
+    ob.data.materials.append(m)
+    return ob
+
+
+def scatter_rice(coll, src_coll, centre, radius=40.0, paddy_img_path=None, seed=9):
+    """Rice hills in transplant rows (0.25 x 0.30 m) around a camera, skipping dikes."""
+    from PIL import Image
+    rng = np.random.default_rng(seed)
+    clumps = [rice_clump(f"Rice{i}", src_coll, i) for i in range(4)]
+    for c in clumps:
+        c.hide_render = True
+    img = np.asarray(Image.open(paddy_img_path))[::-1] if paddy_img_path else None
+    ang = math.radians(8)
+    u = np.arange(-radius, radius, 0.25); v = np.arange(-radius, radius, 0.30)
+    U, Vv = np.meshgrid(u, v)
+    X = centre[0] + U * math.cos(ang) - Vv * math.sin(ang) + rng.normal(0, 0.03, U.shape)
+    Y = centre[1] + U * math.sin(ang) + Vv * math.cos(ang) + rng.normal(0, 0.03, U.shape)
+    keep = np.hypot(X - centre[0], Y - centre[1]) < radius
+    keep &= np.hypot(X - centre[0], Y - centre[1]) > 1.2
+    if img is not None:
+        px = ((X - PADDY_X0)).astype(int).clip(0, img.shape[1] - 1); py = ((Y - PADDY_Y0)).astype(int).clip(0, img.shape[0] - 1)
+        keep &= img[py, px, 1] < 60                                   # not on a dike
+        keep &= img[py, px, 2] < 150                                  # rice / ripening fields only
+    X, Y = X[keep], Y[keep]
+    Z = natural_ground(X, Y)
+    pts = np.stack([X, Y, Z], -1)
+    return scatter_tree("VegRice", coll, pts, clumps, (0.85, 1.15), seed, wind=0.10)
+
+
+def build_mist_layers(coll, heights=(4.0, 5.2, 6.6, 8.2, 10.0, 12.0, 14.3, 16.9, 19.8, 23.0, 26.6, 30.6, 35.0), tau=0.011,
+                      extent=((-4000, 8000), (-4500, 5000)), colour=(0.86, 0.80, 0.72), strength=0.95):
+    """Valley mist as stacked translucent layers (cheap, noise-free alternative to volumes).
+
+    Each layer's opacity uses the true path length through a slab: a = 1 - exp(-tau_eff / |cos(theta)|),
+    with tau_eff modulated by drifting 4D noise (patchy, slowly moving mist) and fading with height.
+    """
+    m = bpy.data.materials.new("MistLayer")
+    m.use_nodes = True
+    nt = m.node_tree; nt.nodes.clear(); L = nt.links.new
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    dot = nt.nodes.new("ShaderNodeVectorMath"); dot.operation = "DOT_PRODUCT"
+    L(geo.outputs["Normal"], dot.inputs[0]); L(geo.outputs["Incoming"], dot.inputs[1])
+    ab = nt.nodes.new("ShaderNodeMath"); ab.operation = "ABSOLUTE"; L(dot.outputs["Value"], ab.inputs[0])
+    mx = nt.nodes.new("ShaderNodeMath"); mx.operation = "MAXIMUM"; mx.inputs[1].default_value = 0.035; L(ab.outputs[0], mx.inputs[0])
+    # patchy density: 4D noise in world space, drifting with time (frame driven W)
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    nz = nt.nodes.new("ShaderNodeTexNoise"); nz.noise_dimensions = "4D"; nz.inputs["Scale"].default_value = 0.0025
+    nz.inputs["Detail"].default_value = 3; nz.inputs["Roughness"].default_value = 0.55
+    L(geo.outputs["Position"], nz.inputs["Vector"])
+    drv = nz.inputs["W"].driver_add("default_value")
+    drv.driver.expression = "frame / 2400.0"
+    dens = nt.nodes.new("ShaderNodeMapRange"); dens.inputs[1].default_value = 0.35; dens.inputs[2].default_value = 0.75
+    dens.inputs[3].default_value = 0.15; dens.inputs[4].default_value = 1.6
+    L(nz.outputs["Fac"], dens.inputs[0])
+    # layer height falloff (object property 'hf') and tau
+    hf = nt.nodes.new("ShaderNodeAttribute"); hf.attribute_type = "OBJECT"; hf.attribute_name = "hf"
+    t1 = nt.nodes.new("ShaderNodeMath"); t1.operation = "MULTIPLY"; t1.inputs[1].default_value = tau
+    L(dens.outputs[0], t1.inputs[0])
+    t2 = nt.nodes.new("ShaderNodeMath"); t2.operation = "MULTIPLY"; L(t1.outputs[0], t2.inputs[0]); L(hf.outputs["Fac"], t2.inputs[1])
+    dv = nt.nodes.new("ShaderNodeMath"); dv.operation = "DIVIDE"; L(t2.outputs[0], dv.inputs[0]); L(mx.outputs[0], dv.inputs[1])
+    ng = nt.nodes.new("ShaderNodeMath"); ng.operation = "MULTIPLY"; ng.inputs[1].default_value = -1.0; L(dv.outputs[0], ng.inputs[0])
+    ex = nt.nodes.new("ShaderNodeMath"); ex.operation = "EXPONENT"; L(ng.outputs[0], ex.inputs[0])
+    al = nt.nodes.new("ShaderNodeMath"); al.operation = "SUBTRACT"; al.inputs[0].default_value = 1.0; L(ex.outputs[0], al.inputs[1])
+    # brightness: sunlit mist glows towards the sun (Henyey-Greenstein-like boost from the scene sun direction)
+    em = nt.nodes.new("ShaderNodeEmission"); em.inputs["Color"].default_value = (*colour, 1); em.inputs["Strength"].default_value = strength
+    tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+    mix = nt.nodes.new("ShaderNodeMixShader"); L(al.outputs[0], mix.inputs[0]); L(tr.outputs[0], mix.inputs[1]); L(em.outputs[0], mix.inputs[2])
+    L(mix.outputs[0], out.inputs["Surface"])
+    objs = []
+    (x0, x1), (y0, y1) = extent
+    for i, h in enumerate(heights):
+        v = [(x0, y0, h), (x1, y0, h), (x1, y1, h), (x0, y1, h)]
+        ob = new_mesh_object(f"Mist{i}", np.array(v, float), [(0, 1, 2, 3)], coll, smooth=False)
+        ob.data.materials.append(m)
+        ob["hf"] = float(math.exp(-(h - 4.0) / 12.0))
+        ob.visible_shadow = False
+        ob.visible_diffuse = False
+        ob.visible_glossy = True
+        objs.append(ob)
+    return objs

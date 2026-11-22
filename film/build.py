@@ -14,6 +14,7 @@ import numpy as np
 from . import alignment as A
 from . import bl, infra, shots as SH, specs as S, train as TR, world as W
 
+PADDY_PATH = [None]
 QUALITY = {
     "preview": dict(res=(640, 360), samples=16, veg_scale=0.6),
     "still": dict(res=(1920, 1080), samples=96, veg_scale=1.0),
@@ -226,7 +227,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     log("sky + haze")
     W.build_sky(sc, os.path.join(assets, "hdri", "kloppenheim_06_puresky_8k.hdr"))
     cw = bl.collection("World")
-    W.build_haze(cw, layers=((0, 24, 0.00062),))        # real volumetric valley mist; aerial haze in compositing
+    W.build_mist_layers(cw)                               # valley mist (layered, physically weighted); aerial haze in compositing
     from . import post
     post.setup(sc, visibility=7500.0)
 
@@ -235,6 +236,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     if not os.path.exists(pimg_path):
         W.paddy_image(pimg_path)
     pimg = bpy.data.images.load(pimg_path)
+    PADDY_PATH[0] = pimg_path
     mats = dict(terrain=W.terrain_material(tex, pimg), karst=W.karst_material(tex))
     far, strip = W.build_terrain(cw, mats)
     towers = W.build_towers(cw, mats)
@@ -357,6 +359,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     W.scatter_tree("VegTowers", coll, pts, crowns, (2.5, 5.0), 1, wind=0.0)
     # hill massif & corridor slopes near the cutting / portal: real trees + shrubs + grass
     strip = bpy.data.objects["TerrainCorridor"]
+    far = bpy.data.objects["TerrainFar"]
     def slope_near(lo, hi, lat_min):
         def f(p, n):
             s, lat = A.nearest_s(p[:, 0], p[:, 1])
@@ -374,15 +377,13 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     def valley(p, n):
         s, lat = A.nearest_s(p[:, 0], p[:, 1])
         return (p[:, 2] < 6) & (np.abs(lat) > 14) & (np.abs(lat) < 400) & (s > 600) & (s < 2600)
-    far = bpy.data.objects["TerrainFar"]
     pts = W.sample_surface([strip, far], 0.0015 * scale, rng, valley, max_n=20000)
-    W.scatter_tree("VegValleyTrees", coll, pts, trees + crowns[:2], (0.8, 1.3), 5, wind=0.03)
+    W.scatter_tree("VegValleyTrees", coll, pts, trees, (0.8, 1.3), 5, wind=0.03)
     # grass + weeds right around the S2 camera (paddy edge)
     c2 = [s for s in SH.build_shots() if s.name.startswith("S2")][0].cam_fn(0)
     def near_c2(p, n):
         return np.hypot(p[:, 0] - c2[0], p[:, 1] - c2[1]) < 60
-    pts = W.sample_surface([strip, far], 2.5 * scale, rng, near_c2, max_n=60000)
-    W.scatter_tree("VegPaddyGrass", coll, pts, grasses, (0.9, 1.8), 6, wind=0.08)
+    W.scatter_rice(coll, src, c2, 42.0 if scale >= 1 else 25.0, PADDY_PATH[0])
 
 
 def main():
