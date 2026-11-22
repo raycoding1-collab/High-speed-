@@ -130,6 +130,8 @@ def build_particles(name, coll, traj, kinds, f0, mats, cam=None):
     me = ob.data
     me.materials.append(mats["leaf"]); me.materials.append(mats["dust"])
     me.polygons.foreach_set("material_index", kinds.astype(np.int32))
+    lid = me.attributes.new("lid", "FLOAT", "FACE")              # stable per-leaf colour (no per-frame flicker)
+    lid.data.foreach_set("value", rng.random(n).astype(np.float32))
     ob.shape_key_add(name="Basis", from_mix=False)
     me.shape_keys.use_relative = False
     for k in range(len(traj)):
@@ -147,14 +149,26 @@ def particle_materials():
     if leaf is None:
         leaf = bpy.data.materials.new("WakeLeaf"); leaf.use_nodes = True
         nt = leaf.node_tree; p = nt.nodes["Principled BSDF"]; L = nt.links.new
-        oi = nt.nodes.new("ShaderNodeObjectInfo")
+        # dry leaves and a few green ones, colour fixed per leaf (face attribute 'lid')
         ramp = nt.nodes.new("ShaderNodeValToRGB")
-        ramp.color_ramp.elements[0].color = (0.16, 0.10, 0.03, 1); ramp.color_ramp.elements[1].color = (0.30, 0.25, 0.08, 1)
-        ramp.color_ramp.elements.new(0.5).color = (0.10, 0.14, 0.03, 1)
-        geo = nt.nodes.new("ShaderNodeNewGeometry"); nz = nt.nodes.new("ShaderNodeTexWhiteNoise")
-        L(geo.outputs["Position"], nz.inputs["Vector"]); L(nz.outputs["Value"], ramp.inputs[0])
+        ramp.color_ramp.elements[0].color = (0.13, 0.07, 0.025, 1); ramp.color_ramp.elements[1].color = (0.24, 0.14, 0.045, 1)
+        ramp.color_ramp.elements.new(0.45).color = (0.19, 0.11, 0.035, 1)
+        ramp.color_ramp.elements.new(0.85).color = (0.08, 0.10, 0.03, 1)
+        at = nt.nodes.new("ShaderNodeAttribute"); at.attribute_name = "lid"
+        L(at.outputs["Fac"], ramp.inputs[0])
         L(ramp.outputs[0], p.inputs["Base Color"]); p.inputs["Roughness"].default_value = 0.7
         p.inputs["Subsurface Weight"].default_value = 0.15
+        # leaf outline instead of a rectangle: |2x|^1.6 + |2y|^2 < 1 on the quad UVs (pointed tips)
+        uv = nt.nodes.new("ShaderNodeUVMap"); sp = nt.nodes.new("ShaderNodeSeparateXYZ"); L(uv.outputs[0], sp.inputs[0])
+        def term(sock, pw):
+            a = nt.nodes.new("ShaderNodeMath"); a.operation = "SUBTRACT"; L(sock, a.inputs[0]); a.inputs[1].default_value = 0.5
+            b = nt.nodes.new("ShaderNodeMath"); b.operation = "ABSOLUTE"; L(a.outputs[0], b.inputs[0])
+            c = nt.nodes.new("ShaderNodeMath"); c.operation = "MULTIPLY"; L(b.outputs[0], c.inputs[0]); c.inputs[1].default_value = 2.0
+            d = nt.nodes.new("ShaderNodeMath"); d.operation = "POWER"; L(c.outputs[0], d.inputs[0]); d.inputs[1].default_value = pw
+            return d.outputs[0]
+        sm = nt.nodes.new("ShaderNodeMath"); sm.operation = "ADD"; L(term(sp.outputs["X"], 1.6), sm.inputs[0]); L(term(sp.outputs["Y"], 2.0), sm.inputs[1])
+        inside = nt.nodes.new("ShaderNodeMath"); inside.operation = "LESS_THAN"; L(sm.outputs[0], inside.inputs[0]); inside.inputs[1].default_value = 1.0
+        L(inside.outputs[0], p.inputs["Alpha"])
     dust = bpy.data.materials.get("WakeDust")
     if dust is None:
         dust = bpy.data.materials.new("WakeDust"); dust.use_nodes = True

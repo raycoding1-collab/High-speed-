@@ -423,6 +423,15 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         return k & ~infra.on_lattice(s_, np.abs(lat_)) & ~((np.abs(lat_) > 5.6) & (np.abs(lat_) < 6.9))   # not on beams / in drains
     pts = W.sample_surface([strip], 8.0 * scale, rng, cut_grass, max_n=320000)
     log("  cutting grass", len(pts))
+    # close to the S7 trackside camera the hydroseeded pockets are thick with grass (the camera is 3 m from the slope)
+    c7 = np.asarray([sh for sh in SH.build_shots() if sh.name.startswith("S7")][0].cam_fn(0.0), float)
+    def near7(p, n):
+        return cut_grass(p, n) & (np.hypot(p[:, 0] - c7[0], p[:, 1] - c7[1]) < 45.0)
+    p7 = W.sample_surface([strip], 45.0 * scale, rng, near7, max_n=120000,
+                          tri_filter=lambda c: np.hypot(c[:, 0] - c7[0], c[:, 1] - c7[1]) < 48.0)
+    if len(pts):
+        pts = np.concatenate([pts, p7])
+    log("  + dense grass at the S7 camera", len(p7))
     W.scatter_tree("VegCuttingGrass", coll, pts, grasses, (0.8, 1.6), 4, wind=0.10)
     # valley floor: dense green tree clumps (copses, river lines, hamlet groves) and a few lone trees, like real
     # southern-Chinese farmland. (Evenly scattered single Poly Haven "island" trees read as savanna, so not used here.)
