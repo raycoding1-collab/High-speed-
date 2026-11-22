@@ -84,10 +84,12 @@ def build_shots():
                       "Drone flying alongside at its 26 m/s maximum; the train overtakes at 85 m/s relative and leaves it behind",
                       lambda t: _rail(1650 + 26 * t, -24, 12),
                       None, fstop=4.0))
-    # S4 helicopter chase at 70 m/s (AS350 cruise), 180 m off, 60 m above the deck, 135 mm on a gimbal
+    # S4 helicopter chase at 70 m/s (AS350 cruise), 160 m off and only 7 m above the deck, 135 mm on a gimbal:
+    # a long-lens panning shot whose background is the far side of the valley (hamlets, groves, orchards, the
+    # karst towers) streaking past, like real helicopter footage of high-speed trains
     shots.append(Shot("S4_heli", 9.0, 2080.0, 135,
-                      "Helicopter at 70 m/s (252 km/h) paralleling the curve; the 400 km/h train slowly pulls away",
-                      lambda t: _rail(2080 - 120 + 70 * t, -185, 62),
+                      "Helicopter at 70 m/s (252 km/h) paralleling the line just above deck height; the 400 km/h train slowly pulls away",
+                      lambda t: _rail(2080 - 120 + 70 * t, -160, 7),
                       None, fstop=5.6, shake=0.08))
     # S5 cab view
     shots.append(Shot("S5_cab", 8.0, 2955.0, 24,
