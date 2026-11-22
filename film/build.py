@@ -15,7 +15,7 @@ from . import alignment as A
 from . import bl, infra, shots as SH, specs as S, train as TR, world as W
 
 QUALITY = {
-    "preview": dict(res=(960, 540), samples=24, veg_scale=0.35),
+    "preview": dict(res=(640, 360), samples=16, veg_scale=0.6),
     "still": dict(res=(1920, 1080), samples=96, veg_scale=1.0),
     "final": dict(res=(1920, 1080), samples=128, veg_scale=1.0),
     "final4k": dict(res=(3840, 2160), samples=96, veg_scale=1.0),
