@@ -15,6 +15,7 @@ def _img(nt, path, noncolor=False, interp="Cubic"):
     im = bpy.data.images.load(path, check_existing=True)
     if noncolor:
         im.colorspace_settings.name = "Non-Color"
+    im.alpha_mode = "CHANNEL_PACKED"      # alpha holds data (glass mask / roughness), keep RGB intact
     n.image = im
     n.interpolation = interp
     return n
@@ -93,7 +94,11 @@ def body_material(name, col_path, dat_path):
     L(is_ws.outputs[0], tint.inputs["Factor"])
     tr = nt.nodes.new("ShaderNodeBsdfTransparent"); L(tint.outputs["Result"], tr.inputs[0])
     gl = nt.nodes.new("ShaderNodeBsdfGlossy"); gl.inputs["Roughness"].default_value = 0.01
-    fr = nt.nodes.new("ShaderNodeFresnel"); fr.inputs["IOR"].default_value = 1.52
+    fr = nt.nodes.new("ShaderNodeFresnel")
+    # thin pane: no total internal reflection when seen from inside -> undo the node's automatic 1/IOR on back faces
+    geo0 = nt.nodes.new("ShaderNodeNewGeometry")
+    ior = nt.nodes.new("ShaderNodeMath"); ior.operation = "MULTIPLY_ADD"; ior.inputs[1].default_value = 1 / 1.52 - 1.52; ior.inputs[2].default_value = 1.52
+    L(geo0.outputs["Backfacing"], ior.inputs[0]); L(ior.outputs[0], fr.inputs["IOR"])
     gmix = nt.nodes.new("ShaderNodeMixShader"); L(fr.outputs[0], gmix.inputs[0]); L(tr.outputs[0], gmix.inputs[1]); L(gl.outputs[0], gmix.inputs[2])
     # lamp lens: emission driven by object property "lamp" (rgb * strength)
     is_lamp = nt.nodes.new("ShaderNodeMath"); is_lamp.operation = "COMPARE"; is_lamp.inputs[1].default_value = 0.25; is_lamp.inputs[2].default_value = 0.1

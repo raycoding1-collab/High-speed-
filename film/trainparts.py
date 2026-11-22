@@ -64,32 +64,40 @@ def tube_between(name, p0, p1, r, coll=None, segs=12):
 
 
 def join(objs, name):
-    """Join objects (applying transforms) into one mesh object."""
+    """Join objects (applying their own loc/rot/scale + modifiers) into one new mesh object (not linked)."""
     import bmesh
     me = bpy.data.meshes.new(name)
     bm = bmesh.new()
-    mats = []
+    mats, matidx = [], {}
+    need_eval = any(len(o.modifiers) for o in objs)
+    dg = bpy.context.evaluated_depsgraph_get() if need_eval else None
     for o in objs:
-        dg = bpy.context.evaluated_depsgraph_get()
-        oe = o.evaluated_get(dg)
-        m = oe.to_mesh()
+        if o.modifiers:
+            oe = o.evaluated_get(dg); m = oe.to_mesh().copy(); oe.to_mesh_clear()
+        else:
+            m = o.data.copy()
         m.transform(o.matrix_basis)
-        off = len(mats)
+        remap = []
         for ms in o.data.materials:
-            mats.append(ms)
-        tmp = bmesh.new(); tmp.from_mesh(m)
-        for f in tmp.faces:
-            f.material_index += off
-        tmp.to_mesh(m); tmp.free()
+            if ms.name not in matidx:
+                matidx[ms.name] = len(mats); mats.append(ms)
+            remap.append(matidx[ms.name])
+        if remap:
+            idx = np.zeros(len(m.polygons), dtype=np.int32)
+            m.polygons.foreach_get("material_index", idx)
+            idx = np.array(remap, dtype=np.int32)[np.clip(idx, 0, len(remap) - 1)]
+            m.polygons.foreach_set("material_index", idx)
         bm.from_mesh(m)
-        oe.to_mesh_clear()
+        bpy.data.meshes.remove(m)
     bm.to_mesh(me); bm.free()
     for ms in mats:
         me.materials.append(ms)
     for o in objs:
+        d = o.data
         bpy.data.objects.remove(o, do_unlink=True)
-    ob = bpy.data.objects.new(name, me)
-    return ob
+        if d.users == 0:
+            bpy.data.meshes.remove(d)
+    return bpy.data.objects.new(name, me)
 
 
 def setmat(ob, mat):
@@ -273,12 +281,12 @@ def build_deflector(name, coll, X_origin):
     """Obstacle deflector / lower front spoiler under the bill (dark grey)."""
     prof = []  # wedge in plan
     pts = []
-    for X, hw in ((0.55, 0.55), (1.2, 0.85), (2.0, 1.15), (3.0, 1.40), (4.2, 1.52)):
+    for X, hw in ((1.05, 0.62), (1.5, 0.85), (2.2, 1.12), (3.0, 1.36), (4.2, 1.50)):
         pts.append((X, hw))
     verts = []
     for X, hw in pts:
         for y in (-hw, hw):
-            verts.append((X_origin - X, y, 0.12)); verts.append((X_origin - X, y, 0.40))
+            verts.append((X_origin - X, y, 0.13)); verts.append((X_origin - X, y, 0.36))
     faces = []
     n = len(pts)
     for i in range(n - 1):
