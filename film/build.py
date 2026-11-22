@@ -108,6 +108,25 @@ def animate(scene, res, ocs, shots):
         bl.set_keys(wob, inp.path_from_id("value"), 0, frames, sp)
 
 
+def key_grass_wake(shots):
+    """Feed the train head/tail chainage to the vegetation scatter (slipstream tilt) for every frame."""
+    frames, heads = [], []
+    for sh, f0, f1 in SH.timeline(shots):
+        for f in range(f0, f1 + 1):
+            for sub in (0.0, 0.5):
+                frames.append(f + sub); heads.append(sh.s_head((f - f0 + sub) / SH.FPS))
+    frames = np.array(frames, np.float32); heads = np.array(heads)
+    for name, amp in (("VegCuttingGrass", 0.9), ("VegHillShrubs", 0.25), ("VegPaddyGrass", 0.0)):
+        ob = bpy.data.objects.get(name)
+        if ob is None:
+            continue
+        md = ob.modifiers["scatter"]
+        bl.modifier_input(md, "Wake").value = amp
+        bl.modifier_input(md, "Track Off").value = A.track_offset()
+        bl.set_keys(ob, bl.modifier_input(md, "Head S").path_from_id("value"), 0, frames, heads)
+        bl.set_keys(ob, bl.modifier_input(md, "Tail S").path_from_id("value"), 0, frames, heads - S.TRAIN_LENGTH)
+
+
 def _fcurves(action):
     try:
         return list(action.fcurves)
@@ -237,9 +256,13 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     if veg:
         log("vegetation")
         build_vegetation(cw, assets, towers, q["veg_scale"])
+    log("wake effects")
+    from . import wake
+    wake.build_wake_effects(bl.collection("Wake"), lambda x, y: W.ground(x, y))
     log("cameras + animation")
     shots = SH.build_shots()
     animate(sc, res, ocs, shots)
+    key_grass_wake(shots)
     make_cameras(sc, shots, res)
     for ob in res["wheelsets"]:
         try:

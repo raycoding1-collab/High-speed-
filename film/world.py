@@ -489,6 +489,10 @@ def scatter_tree(name, coll, pts_xyz, sources, scale_range, seed, wind=0.03):
     b = me.attributes.new("sc", "FLOAT", "POINT"); b.data.foreach_set("value", sc)
     yaw = rng.uniform(0, 2 * np.pi, n).astype(np.float32)
     c = me.attributes.new("yaw", "FLOAT", "POINT"); c.data.foreach_set("value", yaw)
+    P = np.asarray(pts_xyz, float)
+    si, li = A.nearest_s(P[:, 0], P[:, 1])
+    for nm, arr in (("s_i", si), ("lat_i", li), ("hd_i", A.heading(si))):
+        at = me.attributes.new(nm, "FLOAT", "POINT"); at.data.foreach_set("value", np.asarray(arr, np.float32))
     me.update()
     ob = bpy.data.objects.new(name, me); coll.objects.link(ob)
     vc = collection(name + "_src", bpy.data.collections["VegSources"])
@@ -530,7 +534,40 @@ def _scatter_tree():
     L(sub.outputs[0], wmul.inputs[0]); L(gi.outputs["Wind"], wmul.inputs["Scale"])
     sepw = N.new("ShaderNodeSeparateXYZ"); L(wmul.outputs[0], sepw.inputs[0])
     comb = N.new("ShaderNodeCombineXYZ"); L(sepw.outputs["X"], comb.inputs["X"]); L(sepw.outputs["Y"], comb.inputs["Y"]); L(yaw.outputs["Attribute"], comb.inputs["Z"])
-    e2r = N.new("FunctionNodeEulerToRotation"); L(comb.outputs[0], e2r.inputs["Euler"])
+    # ---- slipstream / wake tilt: grass bends downstream while the train passes and in its wake
+    for nm, dv in (("Head S", -1e6), ("Tail S", -1e6), ("Wake", 0.0), ("Track Off", 2.5)):
+        it = ng.interface.new_socket(nm, in_out="INPUT", socket_type="NodeSocketFloat"); it.default_value = dv
+    def attr(nm):
+        a = N.new("GeometryNodeInputNamedAttribute"); a.data_type = "FLOAT"; a.inputs["Name"].default_value = nm
+        return a.outputs["Attribute"]
+    def m(op, a, b=None, c=None):
+        n = N.new("ShaderNodeMath"); n.operation = op
+        for i, v in enumerate((a, b, c)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                n.inputs[i].default_value = v
+            else:
+                L(v, n.inputs[i])
+        return n.outputs[0]
+    gi2 = N.new("NodeGroupInput")
+    si, li, hd = attr("s_i"), attr("lat_i"), attr("hd_i")
+    dtail = m("SUBTRACT", gi2.outputs["Tail S"], si)                       # >0: tail has passed this plant
+    behind = m("GREATER_THAN", dtail, 0.0)
+    beside = m("MULTIPLY", m("LESS_THAN", si, gi2.outputs["Head S"]), m("SUBTRACT", 1.0, behind))
+    tsince = m("DIVIDE", dtail, S.SPEED)
+    wdecay = m("EXPONENT", m("MULTIPLY", tsince, -1.0 / 1.1))
+    timef = m("MULTIPLY_ADD", beside, 0.65, m("MULTIPLY", behind, wdecay))
+    latd = m("MAXIMUM", m("SUBTRACT", m("ABSOLUTE", m("SUBTRACT", li, gi2.outputs["Track Off"])), 1.7), 0.0)
+    latf = m("EXPONENT", m("MULTIPLY", latd, -1.0 / 2.5))
+    flutter = N.new("ShaderNodeTexNoise"); flutter.noise_dimensions = "4D"; flutter.inputs["Scale"].default_value = 2.5
+    ft = m("MULTIPLY", tm.outputs["Seconds"], 9.0); L(pos.outputs[0], flutter.inputs["Vector"]); L(ft, flutter.inputs["W"])
+    amp = m("MULTIPLY", m("MULTIPLY", m("MULTIPLY", timef, latf), gi2.outputs["Wake"]), m("MULTIPLY_ADD", flutter.outputs["Fac"], 1.2, 0.4))
+    # tilt towards +s: rotation vector (-sin hd, cos hd) * amp
+    wx = m("ADD", sepw.outputs["X"], m("MULTIPLY", m("MULTIPLY", m("SINE", hd), -1.0), amp))
+    wy = m("ADD", sepw.outputs["Y"], m("MULTIPLY", m("COSINE", hd), amp))
+    comb2 = N.new("ShaderNodeCombineXYZ"); L(wx, comb2.inputs["X"]); L(wy, comb2.inputs["Y"]); L(yaw.outputs["Attribute"], comb2.inputs["Z"])
+    e2r = N.new("FunctionNodeEulerToRotation"); L(comb2.outputs[0], e2r.inputs["Euler"])
     iop = N.new("GeometryNodeInstanceOnPoints")
     iop.inputs["Pick Instance"].default_value = True
     L(gi.outputs["Geometry"], iop.inputs["Points"]); L(ci.outputs[0], iop.inputs["Instance"])
