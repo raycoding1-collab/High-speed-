@@ -605,7 +605,9 @@ def _scatter_tree():
     dtail = m("SUBTRACT", gi2.outputs["Tail S"], si)                       # >0: tail has passed this plant
     behind = m("GREATER_THAN", dtail, 0.0)
     beside = m("MULTIPLY", m("LESS_THAN", si, gi2.outputs["Head S"]), m("SUBTRACT", 1.0, behind))
-    tsince = m("DIVIDE", dtail, S.SPEED)
+    # time since the tail passed, clamped at 0: for plants the train never reaches, exp(-t/1.1) would be exp(+huge) = inf
+    # and 0 * inf = NaN made every instance transform NaN (tower crowns, valley trees and rice were never rendered)
+    tsince = m("MAXIMUM", m("DIVIDE", dtail, S.SPEED), 0.0)
     wdecay = m("EXPONENT", m("MULTIPLY", tsince, -1.0 / 1.1))
     timef = m("MULTIPLY_ADD", beside, 0.65, m("MULTIPLY", behind, wdecay))
     latd = m("MAXIMUM", m("SUBTRACT", m("ABSOLUTE", m("SUBTRACT", li, gi2.outputs["Track Off"])), 1.7), 0.0)
