@@ -90,6 +90,10 @@ def natural_ground(x, y):
     tx, ty = A.xy(s_t + 380)
     d = np.sqrt((x - tx) ** 2 + ((y - ty) * 0.8) ** 2)
     massif = 165 * np.clip(1 - (d / 760) ** 2.0, 0, 1) ** 0.75 + 22 * _noise2(x, y, 60, 3) * np.clip(1 - d / 800, 0, 1)
+    # v3: break the smooth dome skyline into karst knobs and saddles (only over the summit, d < 420-520 m, i.e.
+    # behind the portal: the cutting, the portal face and the tunnel cover keep their v2 shape)
+    core = np.clip((520 - d) / 100, 0, 1)
+    massif = massif + core * (55 * np.clip(_noise2(x, y, 170, 7) + 0.1, 0, None) ** 1.4 + 18 * _noise2(x, y, 75, 8))
     # foothills rising above rail level from ~s=3850 so the line runs in a cutting before the tunnel
     rise = np.clip((x - 3450) / 550, 0, 1) ** 1.3 * 44 * (1 + 0.25 * _noise2(x, y, 250, 4))
     return 1.2 + valley + rise + river_depression(x, y) + massif

@@ -79,7 +79,7 @@ def place(ob, s, offset=0.0, canted=False, up=0.0, yaw=0.0):
 
 
 # ------------------------------------------------------------------ materials
-def concrete(name="Concrete", tex=None, tint=(1, 1, 1), scale=0.25, rough_add=0.0, cell=None, streaks=True, hab=False):
+def concrete(name="Concrete", tex=None, tint=(1, 1, 1), scale=0.25, rough_add=0.0, cell=None, streaks=True, hab=False, moss=0.0):
     m = bpy.data.materials.get(name)
     if m:
         return m
@@ -112,7 +112,7 @@ def concrete(name="Concrete", tex=None, tint=(1, 1, 1), scale=0.25, rough_add=0.
         L(cmb.outputs[0], mul.inputs["B"])
         col = mul.outputs["Result"]
         rough = r.outputs["Color"]
-        col, rough = _weathering(nt, col, rough, cell, streaks, hab)
+        col, rough = _weathering(nt, col, rough, cell, streaks, hab, moss)
         L(col, p.inputs["Base Color"])
         ra = nt.nodes.new("ShaderNodeMath"); ra.operation = "ADD"; ra.inputs[1].default_value = rough_add
         L(rough, ra.inputs[0]); L(ra.outputs[0], p.inputs["Roughness"])
@@ -126,7 +126,7 @@ def concrete(name="Concrete", tex=None, tint=(1, 1, 1), scale=0.25, rough_add=0.
 
 
 
-def _weathering(nt, col, rough, cell=None, streaks=True, hab=False):
+def _weathering(nt, col, rough, cell=None, streaks=True, hab=False, moss=0.0):
     """Real-concrete weathering on top of the photo texture (all cheap procedural nodes, no extra rays):
     - element-to-element tone (each 32 m girder span / parapet segment by chainage, each pier by world cell),
     - rain-runoff streaks on vertical faces (dark dirt streaks, a few pale efflorescence streaks), patchy,
@@ -178,6 +178,15 @@ def _weathering(nt, col, rough, cell=None, streaks=True, hab=False):
         e = math("MULTIPLY", math("MULTIPLY", pale.outputs[0], amt), 0.10)
         col = scale_col(col, math("ADD", math("SUBTRACT", 1.0, d), e))
         rough = math("ADD", rough, math("MULTIPLY", d, -0.3))       # wet-dark streaks are slightly smoother
+    if moss > 0:          # soil, algae and moss on concrete lying in the grass (lattice frames, drains)
+        mz = node("ShaderNodeTexNoise"); mz.inputs["Scale"].default_value = 0.9; mz.inputs["Detail"].default_value = 6.0
+        L(geo.outputs["Position"], mz.inputs["Vector"])
+        mm = node("ShaderNodeMapRange"); L(mz.outputs["Fac"], mm.inputs[0]); mm.inputs[1].default_value = 0.40; mm.inputs[2].default_value = 0.70
+        f = math("MULTIPLY", mm.outputs[0], moss)
+        mx = node("ShaderNodeMix", data_type="RGBA"); L(f, mx.inputs["Factor"]); L(col, mx.inputs["A"])
+        mx.inputs["B"].default_value = (0.055, 0.065, 0.03, 1)
+        col = mx.outputs["Result"]
+        rough = math("ADD", rough, math("MULTIPLY", f, 0.2))
     if hab:
         at = node("ShaderNodeAttribute", attribute_name="hab")
         foot = node("ShaderNodeMapRange"); L(at.outputs["Fac"], foot.inputs[0])
@@ -679,7 +688,7 @@ def build_cutting_details(coll, tex):
       soil (embedded 0.15 m), in 5 m diamonds, up to 15 m above rail level, so the low sun throws real shadows;
     - concrete-lined side drains (0.8 x 0.5 m U-channels) at the toe of both slopes;
     - a crushed-stone cess between the slab-track base and the drain."""
-    con = concrete("LatticeConcrete", tex.get("concrete"), (0.86, 0.85, 0.81), 0.5)
+    con = concrete("LatticeConcrete", tex.get("concrete"), (0.60, 0.59, 0.56), 0.5, moss=0.55)
     s0, s1 = A.VIADUCT[1], A.TUNNEL_S - 16.0
     w, h_top, h_bot = 0.40, 0.15, -0.15
     V, F, UV = [], [], []
@@ -734,8 +743,8 @@ def build_cutting_details(coll, tex):
     objs = [ob]
     if len(cut) > 2:
         c0, c1 = float(cut.min()) + 6.0, float(min(cut.max(), A.TUNNEL_S - 14.5))
-        drain = concrete("DrainConcrete", tex.get("concrete"), (0.80, 0.79, 0.75), 0.5)
-        cess = concrete("CessGravel", tex.get("gravel"), (0.85, 0.83, 0.80), 0.6, streaks=False)
+        drain = concrete("DrainConcrete", tex.get("concrete"), (0.58, 0.57, 0.54), 0.5, moss=0.45)
+        cess = concrete("CessGravel", tex.get("gravel"), (0.52, 0.51, 0.49), 0.9, streaks=False)
         for side in (1.0, -1.0):
             prof = [(5.75, -0.80), (5.85, -0.80), (5.85, -1.28), (6.65, -1.28), (6.65, -0.80), (6.75, -0.80),
                     (6.75, -1.40), (5.75, -1.40)]
