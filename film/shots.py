@@ -78,7 +78,7 @@ def build_shots():
     c2 = _rail(986, 60, 0); c2[2] = _ground_at(c2[0], c2[1]) + 1.55      # north side = the near (left-running) track
     shots.append(Shot("S2_paddy_low", 5.0, 986 - V * 2.4 + 105, 24,
                       "Tripod in the rice field 60 m north of the viaduct, 1.55 m high, looking up: the train streaks across 26 m above the paddies",
-                      lambda t, c=c2: c, lambda t: _rail(1018, 0, -6.0), fstop=5.6))
+                      lambda t, c=c2: c, lambda t: _rail(1018, 0, -12.0), fstop=5.6))   # v3: tilt down: rice + hamlet
     # S3 drone that cannot keep up: 26 m/s (DJI Inspire 3 max), 24 m south of the line, 12 m above deck
     shots.append(Shot("S3_drone", 7.0, 1650 - 300, 24,
                       "Drone flying alongside at its 26 m/s maximum; the train overtakes at 85 m/s relative and leaves it behind",
