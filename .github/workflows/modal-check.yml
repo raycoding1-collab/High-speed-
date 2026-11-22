@@ -1,0 +1,33 @@
+name: modal-check
+
+# Verifies the MODAL_TOKEN_ID / MODAL_TOKEN_SECRET repository secrets without ever printing them:
+# both present and well-formed, the token logs in, and a GPU container can start.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.18"
+      - run: pip install modal==1.6.4
+      - name: Secrets present and well-formed (values are never printed)
+        run: |
+          ok=1
+          case "$MODAL_TOKEN_ID" in ak-*) echo "MODAL_TOKEN_ID: present, ${#MODAL_TOKEN_ID} chars, starts with ak- (correct)";; "") echo "MODAL_TOKEN_ID: MISSING"; ok=0;; *) echo "MODAL_TOKEN_ID: present (${#MODAL_TOKEN_ID} chars) - note: usually starts with ak-";; esac
+          case "$MODAL_TOKEN_SECRET" in as-*) echo "MODAL_TOKEN_SECRET: present, ${#MODAL_TOKEN_SECRET} chars, starts with as- (correct)";; "") echo "MODAL_TOKEN_SECRET: MISSING"; ok=0;; *) echo "MODAL_TOKEN_SECRET: present (${#MODAL_TOKEN_SECRET} chars) - note: usually starts with as-";; esac
+          [ $ok = 1 ]
+      - name: Log in to Modal
+        run: modal token info
+      - name: GPU test (one L4 for a few seconds)
+        run: modal run tools/modal_gpu_check.py
