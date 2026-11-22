@@ -307,8 +307,8 @@ def terrain_material(tex, paddy_img):
     def diag(sign):
         a = nt.nodes.new("ShaderNodeMath"); a.operation = "MULTIPLY_ADD"; a.inputs[1].default_value = sign
         L(usep.outputs["Y"], a.inputs[0]); L(usep.outputs["X"], a.inputs[2])
-        b = nt.nodes.new("ShaderNodeMath"); b.operation = "PINGPONG"; b.inputs[1].default_value = 1.5; L(a.outputs[0], b.inputs[0])
-        c = nt.nodes.new("ShaderNodeMath"); c.operation = "LESS_THAN"; c.inputs[1].default_value = 0.15; L(b.outputs[0], c.inputs[0])
+        b = nt.nodes.new("ShaderNodeMath"); b.operation = "PINGPONG"; b.inputs[1].default_value = 2.5; L(a.outputs[0], b.inputs[0])
+        c = nt.nodes.new("ShaderNodeMath"); c.operation = "LESS_THAN"; c.inputs[1].default_value = 0.12; L(b.outputs[0], c.inputs[0])
         return c.outputs[0]
     lat1, lat2 = diag(1.0), diag(-1.0)
     latt = nt.nodes.new("ShaderNodeMath"); latt.operation = "MAXIMUM"; L(lat1, latt.inputs[0]); L(lat2, latt.inputs[1])

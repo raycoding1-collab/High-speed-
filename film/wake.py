@@ -54,6 +54,10 @@ def simulate(shot, f0, f1, n_leaves=500, n_dust=3200, region=(70, 7.5), seed=3, 
     th0 = A.heading(s0)
     cx, cy = A.xy(s0)
     pos = np.stack([cx - np.sin(th0) * lat, cy + np.cos(th0) * lat, np.zeros(n)], -1)
+    near = np.hypot(pos[:, 0] - cam[0], pos[:, 1] - cam[1]) < 3.0
+    s0[near] += 6.0                                            # nothing spawns right in front of the lens
+    th0 = A.heading(s0); cx, cy = A.xy(s0)
+    pos = np.stack([cx - np.sin(th0) * lat, cy + np.cos(th0) * lat, np.zeros(n)], -1)
     gz = ground_fn(pos[:, 0], pos[:, 1]) if ground_fn else np.full(n, A.RAIL_Z - 0.85)
     pos[:, 2] = gz + 0.01
     vel = np.zeros((n, 3))
@@ -86,37 +90,51 @@ def simulate(shot, f0, f1, n_leaves=500, n_dust=3200, region=(70, 7.5), seed=3, 
     return np.array(out), kinds
 
 
-def build_particles(name, coll, traj, kinds, f0, mats):
-    """Mesh of small quads (leaves) and specks (dust) animated by absolute shape keys."""
+def build_particles(name, coll, traj, kinds, f0, mats, cam=None):
+    """Leaves (tumbling 6-14 cm chips) and dust puffs (camera-facing soft billboards that grow from
+    invisible specks to 0.6-1.6 m once the slipstream has lifted them), animated by absolute shape keys."""
     rng = np.random.default_rng(1)
     n = traj.shape[1]
-    size = np.where(kinds == 0, rng.uniform(0.03, 0.06, n), rng.uniform(0.004, 0.012, n))
+    leaf = kinds == 0
+    size = np.where(leaf, rng.uniform(0.06, 0.14, n), rng.uniform(0.22, 0.50, n))
     rot = rng.uniform(0, 2 * np.pi, (n, 3))
-    corners = np.array([[-1, -0.6, 0], [1, -0.6, 0], [1, 0.6, 0], [-1, 0.6, 0]], float)
+    corners = np.array([[-1, -1, 0], [1, -1, 0], [1, 1, 0], [-1, 1, 0]], float)
+    asp = np.where(leaf, 0.55, 1.0)
+    p0 = traj[0]
 
-    def quads(P, spin):
+    def quads(P, k):
+        disp = np.linalg.norm(P - p0, axis=1)
+        grow = np.where(leaf, 1.0, 0.03 + 0.97 * np.clip(disp / 2.5, 0, 1) * (1 + 0.8 * np.clip((disp - 2.5) / 8, 0, 1)))
+        sz = size * grow
         V = np.zeros((n * 4, 3))
+        if cam is not None:
+            d = cam[None, :] - P; d /= np.linalg.norm(d, axis=1, keepdims=True) + 1e-9
+            ux = np.cross(d, np.array([0, 0, 1.0])); ux /= np.linalg.norm(ux, axis=1, keepdims=True) + 1e-9
+            uy = np.cross(ux, d)
         for i in range(4):
-            c = corners[i] * size[:, None]
-            a = rot[:, 0] + spin; b = rot[:, 1] + spin * 0.7
-            x = c[:, 0] * np.cos(a) - c[:, 1] * np.sin(a)
-            y = c[:, 0] * np.sin(a) + c[:, 1] * np.cos(a)
-            z = y * np.sin(b); y = y * np.cos(b)
-            V[i::4] = P + np.stack([x, y, z], -1)
+            cx = corners[i, 0] * sz; cy = corners[i, 1] * sz * asp
+            # leaves tumble (spin grows with travelled distance); dust faces the camera
+            a = rot[:, 0] + disp * 1.7; b = rot[:, 1] + disp * 1.1
+            lx = cx * np.cos(a) - cy * np.sin(a); ly = cx * np.sin(a) + cy * np.cos(a)
+            lz = ly * np.sin(b); ly2 = ly * np.cos(b)
+            leafv = np.stack([lx, ly2, lz], -1)
+            if cam is not None:
+                dustv = ux * cx[:, None] + uy * cy[:, None]
+            else:
+                dustv = leafv
+            V[i::4] = P + np.where(leaf[:, None], leafv, dustv)
         return V
     faces = [(4 * i, 4 * i + 1, 4 * i + 2, 4 * i + 3) for i in range(n)]
-    ob = new_mesh_object(name, quads(traj[0], 0.0), faces, coll, smooth=False)
+    uvs = np.tile(np.array([(0, 0), (1, 0), (1, 1), (0, 1)], float), (n, 1))
+    ob = new_mesh_object(name, quads(traj[0], 0), faces, coll, uvs=uvs, smooth=False)
     me = ob.data
-    mi = np.repeat(kinds.astype(np.int32), 1)
     me.materials.append(mats["leaf"]); me.materials.append(mats["dust"])
-    me.polygons.foreach_set("material_index", mi)
+    me.polygons.foreach_set("material_index", kinds.astype(np.int32))
     ob.shape_key_add(name="Basis", from_mix=False)
     me.shape_keys.use_relative = False
     for k in range(len(traj)):
         sk = ob.shape_key_add(name=f"k{k}", from_mix=False)
-        speed = np.linalg.norm(traj[k] - traj[max(k - 1, 0)], axis=1) * SH.FPS * 2
-        sk.data.foreach_set("co", quads(traj[k], k * 0.5 * np.clip(speed, 0, 12) * 0.15).astype(np.float32).ravel())
-    # absolute keys: eval_time 10 per key block; key k sits at frame f0 + k/2
+        sk.data.foreach_set("co", quads(traj[k], k).astype(np.float32).ravel())
     nkeys = len(traj)
     frames = f0 + np.arange(nkeys) / 2.0
     evals = 10.0 * (np.arange(nkeys) + 1)
@@ -128,15 +146,38 @@ def particle_materials():
     leaf = bpy.data.materials.get("WakeLeaf")
     if leaf is None:
         leaf = bpy.data.materials.new("WakeLeaf"); leaf.use_nodes = True
-        p = leaf.node_tree.nodes["Principled BSDF"]
-        p.inputs["Base Color"].default_value = (0.20, 0.16, 0.05, 1); p.inputs["Roughness"].default_value = 0.7
-        p.inputs["Subsurface Weight"].default_value = 0.2
+        nt = leaf.node_tree; p = nt.nodes["Principled BSDF"]; L = nt.links.new
+        oi = nt.nodes.new("ShaderNodeObjectInfo")
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        ramp.color_ramp.elements[0].color = (0.16, 0.10, 0.03, 1); ramp.color_ramp.elements[1].color = (0.30, 0.25, 0.08, 1)
+        ramp.color_ramp.elements.new(0.5).color = (0.10, 0.14, 0.03, 1)
+        geo = nt.nodes.new("ShaderNodeNewGeometry"); nz = nt.nodes.new("ShaderNodeTexWhiteNoise")
+        L(geo.outputs["Position"], nz.inputs["Vector"]); L(nz.outputs["Value"], ramp.inputs[0])
+        L(ramp.outputs[0], p.inputs["Base Color"]); p.inputs["Roughness"].default_value = 0.7
+        p.inputs["Subsurface Weight"].default_value = 0.15
     dust = bpy.data.materials.get("WakeDust")
     if dust is None:
         dust = bpy.data.materials.new("WakeDust"); dust.use_nodes = True
-        p = dust.node_tree.nodes["Principled BSDF"]
-        p.inputs["Base Color"].default_value = (0.42, 0.36, 0.27, 1); p.inputs["Roughness"].default_value = 1.0
-        p.inputs["Alpha"].default_value = 0.55
+        nt = dust.node_tree; nt.nodes.clear(); L = nt.links.new
+        out = nt.nodes.new("ShaderNodeOutputMaterial")
+        uv = nt.nodes.new("ShaderNodeUVMap")
+        sep = nt.nodes.new("ShaderNodeSeparateXYZ"); L(uv.outputs[0], sep.inputs[0])
+        def sub(a):
+            n = nt.nodes.new("ShaderNodeMath"); n.operation = "SUBTRACT"; L(a, n.inputs[0]); n.inputs[1].default_value = 0.5
+            q = nt.nodes.new("ShaderNodeMath"); q.operation = "MULTIPLY"; L(n.outputs[0], q.inputs[0]); L(n.outputs[0], q.inputs[1])
+            return q.outputs[0]
+        r2 = nt.nodes.new("ShaderNodeMath"); r2.operation = "ADD"; L(sub(sep.outputs["X"]), r2.inputs[0]); L(sub(sep.outputs["Y"]), r2.inputs[1])
+        g = nt.nodes.new("ShaderNodeMath"); g.operation = "MULTIPLY"; g.inputs[1].default_value = -14.0; L(r2.outputs[0], g.inputs[0])
+        e = nt.nodes.new("ShaderNodeMath"); e.operation = "EXPONENT"; L(g.outputs[0], e.inputs[0])
+        fade = nt.nodes.new("ShaderNodeAttribute"); fade.attribute_type = "OBJECT"; fade.attribute_name = "fade"
+        a = nt.nodes.new("ShaderNodeMath"); a.operation = "MULTIPLY"; L(e.outputs[0], a.inputs[0]); L(fade.outputs["Fac"], a.inputs[1])
+        a2 = nt.nodes.new("ShaderNodeMath"); a2.operation = "MULTIPLY"; a2.inputs[1].default_value = 0.10; L(a.outputs[0], a2.inputs[0])
+        df = nt.nodes.new("ShaderNodeBsdfDiffuse"); df.inputs["Color"].default_value = (0.62, 0.56, 0.45, 1)
+        tl = nt.nodes.new("ShaderNodeBsdfTranslucent"); tl.inputs["Color"].default_value = (0.62, 0.56, 0.45, 1)
+        mx0 = nt.nodes.new("ShaderNodeMixShader"); mx0.inputs[0].default_value = 0.4; L(df.outputs[0], mx0.inputs[1]); L(tl.outputs[0], mx0.inputs[2])
+        tr = nt.nodes.new("ShaderNodeBsdfTransparent")
+        mx = nt.nodes.new("ShaderNodeMixShader"); L(a2.outputs[0], mx.inputs[0]); L(tr.outputs[0], mx.inputs[1]); L(mx0.outputs[0], mx.inputs[2])
+        L(mx.outputs[0], out.inputs["Surface"])
     return dict(leaf=leaf, dust=dust)
 
 
@@ -146,12 +187,19 @@ def build_wake_effects(coll, ground_fn):
     out = []
     for sh, f0, f1 in SH.timeline(SH.build_shots()):
         if sh.name.startswith("S7"):
-            traj, kinds = simulate(sh, f0, f1, 450, 2600, (60, 6.5), 3, ground_fn)
+            traj, kinds = simulate(sh, f0, f1, 900, 800, (60, 6.5), 3, ground_fn)
         elif sh.name.startswith("S9"):
-            traj, kinds = simulate(sh, f0, f1, 300, 1800, (45, 6.0), 5, ground_fn)
+            traj, kinds = simulate(sh, f0, f1, 500, 500, (55, 6.0), 5, ground_fn)
         else:
             continue
-        ob = build_particles(f"Wake_{sh.name}", coll, traj, kinds, f0, mats)
+        ob = build_particles(f"Wake_{sh.name}", coll, traj, kinds, f0, mats, cam=np.asarray(sh.cam_fn(0.0)))
+        # dust cloud thins out over ~3.5 s after the tail has passed the camera
+        cam = np.asarray(sh.cam_fn(0.0))
+        s_cam = float(A.nearest_s(cam[0:1], cam[1:2])[0][0])
+        t_tail = (s_cam + S.TRAIN_LENGTH - sh.s0) / S.SPEED          # when the tail passes the camera's chainage
+        ft = np.array([f0, f0 + (t_tail + 0.3) * SH.FPS, f0 + (t_tail + 4.0) * SH.FPS, f1 + 1], np.float32)
+        ob["fade"] = 1.0
+        set_keys(ob, '["fade"]', 0, ft, np.array([1.0, 1.0, 0.15, 0.1], np.float32))
         # visible only during its own shot
         set_keys(ob, "hide_render", 0, np.array([f0 - 1, f0, f1 + 1], np.float32), np.array([1, 0, 1], np.float32), "CONSTANT")
         out.append(ob)
