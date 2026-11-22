@@ -192,12 +192,11 @@ def straw_stacks(coll, src, hamlets, rng):
     return len(P)
 
 
-def greenhouses(coll, hamlets, rng, n_sites=6):
+def greenhouses(coll, hamlets, rng, n_sites=8):
     film = M.principled("GreenhouseFilm", (0.62, 0.64, 0.62), 0.0, 0.28, coat=0.6)
     frame = M.principled("GreenhouseFrame", (0.45, 0.46, 0.47), 1.0, 0.4)
     obs = []
-    order = rng.permutation(len(hamlets))
-    for hi in order[:n_sites]:
+    for hi in range(min(n_sites, len(hamlets))):               # featured (in-shot) hamlets come first
         hs, hl, hx, hy = hamlets[hi]
         for attempt in range(30):
             a = rng.uniform(0, 2 * math.pi); r = rng.uniform(120, 260)
@@ -239,7 +238,7 @@ def greenhouses(coll, hamlets, rng, n_sites=6):
     return obs
 
 
-def orchards(coll, src, hamlets, rng, n_sites=9):
+def orchards(coll, src, hamlets, rng, n_sites=11):
     """Rows of small citrus trees (crown proxies at 1.1-1.5 m crown radius, dark glossy leaves with fruit dots)."""
     leaf = bpy.data.materials.get("CitrusLeaves")
     if leaf is None:
@@ -261,8 +260,7 @@ def orchards(coll, src, hamlets, rng, n_sites=9):
         t.hide_render = True
         trees.append(t)
     pts = []
-    order = rng.permutation(len(hamlets))
-    for hi in order[:n_sites]:
+    for hi in range(min(n_sites, len(hamlets))):               # featured (in-shot) hamlets come first
         hs, hl, hx, hy = hamlets[hi]
         for attempt in range(30):
             a = rng.uniform(0, 2 * math.pi); r = rng.uniform(110, 240)

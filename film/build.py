@@ -289,10 +289,14 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     W.build_village(cw, assets)
     hr = np.random.default_rng(31)
     for i, (hs, hl, hx, hy) in enumerate(W.hamlet_sites()):
-        W.build_village(cw, assets, n=int(hr.integers(6, 15)), centre_s=hs, lat=hl, seed=40 + i, spread_s=75.0,
-                        spread_l=(-60.0, 60.0), name=f"Hamlet{i}", hamlet=True)
+        featured = (hs, hl) in W.FEATURED_HAMLETS              # in-shot hamlets: bigger, so they read in the wide shots
+        W.build_village(cw, assets, n=int(hr.integers(15, 23)) if featured else int(hr.integers(6, 15)), centre_s=hs, lat=hl,
+                        seed=40 + i, spread_s=95.0 if featured else 75.0, spread_l=(-75.0, 75.0) if featured else (-60.0, 60.0),
+                        name=f"Hamlet{i}", hamlet=True)
     from . import props as PR
-    PR.build_props(cw, bl.collection("VegSources"), W.hamlet_sites())
+    hs_all = W.hamlet_sites()
+    hs_all = [h for h in hs_all if (h[0], h[1]) in W.FEATURED_HAMLETS] + [h for h in hs_all if (h[0], h[1]) not in W.FEATURED_HAMLETS]
+    PR.build_props(cw, bl.collection("VegSources"), hs_all)         # featured (in-shot) hamlets get their props first
 
     log("train")
     ct = bl.collection("Train")
@@ -318,7 +322,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
         except Exception:
             pass
     from . import fog
-    log("atmospheric fog in", fog.apply(sc, sun_dir), "materials")
+    log("atmospheric fog in", fog.apply(sc, sun_dir, s_mist=0.0009, s_haze=0.00006), "materials")   # v3: clearer mid-distance
     sc.render.film_transparent = False
     bpy.ops.file.make_paths_relative() if False else None
     if pack:
