@@ -427,6 +427,20 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     # valley floor: dense green tree clumps (copses, river lines, hamlet groves) and a few lone trees, like real
     # southern-Chinese farmland. (Evenly scattered single Poly Haven "island" trees read as savanna, so not used here.)
     vp = W.valley_tree_points(rng, W.hamlet_sites(), scale)
+    if W.ROADS:                                     # tree lines along the village roads (gaps, both sides)
+        rp = []
+        for (xs, ys) in W.ROADS:
+            dx = np.gradient(xs); dy = np.gradient(ys); nn = np.hypot(dx, dy) + 1e-9
+            for sgn in (-1, 1):
+                k = rng.random(len(xs)) < 0.28
+                off = sgn * rng.uniform(5.0, 7.0, len(xs))
+                rp.append(np.column_stack([xs[k] - dy[k] / nn[k] * off[k], ys[k] + dx[k] / nn[k] * off[k]]))
+        rp = np.concatenate(rp)
+        rp = rp[W._clear_of_features(rp[:, 0], rp[:, 1], 4.0, river=21.0)]
+        _, l_ = A.nearest_s(rp[:, 0], rp[:, 1])
+        rp = rp[np.abs(l_) > 22.0]                  # roads pass under the viaduct: no trees between the piers
+        vp = np.concatenate([vp, np.column_stack([rp, W.ground(rp[:, 0], rp[:, 1])])])
+        log("  road-side trees", len(rp))
     vp = vp[_sightline_mask(vp, 9.0)]
     from . import village as V
     if V.SITES:                                     # no tree grows through a house (houses are <= 14 m across)
@@ -463,8 +477,13 @@ def build_vegetation(coll, assets, towers, scale=1.0):
                 c = np.asarray(sh.cam_fn(0.0), float)
                 k &= np.hypot(p[:, 0] - c[0], p[:, 1] - c[1]) > 150.0
         return k & _sightline_mask(p, 6.0)
-    pts = W.sample_surface([far], 0.018 * scale, rng, massif, max_n=120000,
-                           tri_filter=lambda c: W.natural_ground(c[:, 0], c[:, 1]) > 7.0)
+    # only the hills around the cutting / tunnel that the cameras actually see (the far grid also holds the distant
+    # ranges: spreading the budget over all of them left the near massif bare)
+    ax, ay = A.xy(np.arange(2600.0, A.S_MAX, 100.0))
+    def massif_tris(c):
+        d = np.min(np.hypot(c[:, 0, None] - ax[None, :], c[:, 1, None] - ay[None, :]), axis=1)
+        return (W.natural_ground(c[:, 0], c[:, 1]) > 7.0) & (d < 1600.0)
+    pts = W.sample_surface([far], 0.02 * scale, rng, massif, max_n=160000, tri_filter=massif_tris)
     log("  massif crowns", len(pts))
     W.scatter_tree("VegMassif", coll, pts, crowns, (2.6, 5.8), 8, wind=0.0)
     # grass + weeds right around the S2 camera (paddy edge)

@@ -908,7 +908,7 @@ def valley_tree_points(rng, hamlets, scale=1.0):
     def add(x, y):
         pts.append(np.column_stack([x, y]))
     # copses scattered over the paddies
-    nc = int(650 * scale)
+    nc = int(900 * scale)
     cx = rng.uniform(-1400, 4400, nc * 3); cy = rng.uniform(-1700, 2300, nc * 3)
     k = _clear_of_features(cx, cy, 25.0); cx, cy = cx[k][:nc], cy[k][:nc]
     for x0, y0 in zip(cx, cy):
@@ -1087,6 +1087,9 @@ def _ribbon(name, coll, xs, ys, prof, mat, z_fn, uv_scale=1.0):
     return ob
 
 
+ROADS = []          # road centre polylines (x, y): the vegetation pass plants tree lines along them
+
+
 def build_roads(coll, tex, hamlets):
     """Concrete village roads (3.5 m, the 'every village connected' standard) on a low embankment, linking the
     hamlets and the main village along a minimum spanning tree (no river crossings, around the towers), each with
@@ -1145,6 +1148,7 @@ def build_roads(coll, tex, hamlets):
         if keep.sum() < 3:
             continue
         obs.append(_ribbon(f"Road{k}", coll, px, py, prof, road_mat, zf, uv_scale=0.25))
+        ROADS.append((px, py))
         if ditch_mat is not None:
             obs.append(_ribbon(f"RoadDitch{k}", coll, px, py, ditch, ditch_mat, zf))
     # river banks: mud and pebbles from just under the water line up the bank
