@@ -262,6 +262,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     ocs = infra.build_ocs(ci, A.S_MIN + 30, A.TUNNEL_S + 270)
     build_tunnel(ci, tex)
     infra.build_furniture(ci, lambda x, y: float(W.natural_ground(np.array([x]), np.array([y]))[0]))
+    infra.build_signs(ci, texdir)
     W.build_village(cw)
 
     log("train")

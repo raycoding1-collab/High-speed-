@@ -522,3 +522,61 @@ def build_furniture(coll, ground_fn):
     parts.append(setmat(cylinder("plat", 1.3, 0.12, "z", (p[0], p[1], g + 36.4), coll, 16), galv))
     ob = join(parts, "GSMR_Mast"); coll.objects.link(ob); objs.append(ob)
     return objs
+
+
+def _sign_material(name, text, size_px=(256, 256), bg=(250, 250, 248), fg=(10, 10, 10), font=None, border=True, texdir="/tmp"):
+    """Image-textured sign face generated with PIL (Latin digits or CJK characters)."""
+    import os
+    from PIL import Image, ImageDraw, ImageFont
+    os.makedirs(texdir, exist_ok=True)
+    path = os.path.join(texdir, f"sign_{name}.png")
+    im = Image.new("RGB", size_px, bg); d = ImageDraw.Draw(im)
+    f = ImageFont.truetype(font or "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf", int(size_px[1] * 0.55))
+    bb = d.textbbox((0, 0), text, font=f)
+    d.text(((size_px[0] - (bb[2] - bb[0])) / 2 - bb[0], (size_px[1] - (bb[3] - bb[1])) / 2 - bb[1]), text, fill=fg, font=f)
+    if border:
+        d.rectangle([3, 3, size_px[0] - 4, size_px[1] - 4], outline=fg, width=6)
+    im.save(path)
+    m = bpy.data.materials.new(f"Sign_{name}"); m.use_nodes = True
+    nt = m.node_tree; p = nt.nodes["Principled BSDF"]
+    t = nt.nodes.new("ShaderNodeTexImage"); t.image = bpy.data.images.load(path)
+    nt.links.new(t.outputs["Color"], p.inputs["Base Color"]); p.inputs["Roughness"].default_value = 0.5
+    return m
+
+
+def _plate(name, w, h, mat, coll):
+    v = [(-w / 2, 0, 0), (w / 2, 0, 0), (w / 2, 0, h), (-w / 2, 0, h)]
+    ob = new_mesh_object(name, np.array(v), [(0, 1, 2, 3)], coll, uvs=np.array([(0, 0), (1, 0), (1, 1), (0, 1)]), smooth=False)
+    ob.data.materials.append(mat)
+    return ob
+
+
+def build_signs(coll, texdir, km0=1186.0):
+    """Readable kilometre posts every 1000 m and a neutral section (断 / 合 boards) on the viaduct."""
+    from .trainparts import box, setmat
+    objs = []
+    white = M.principled("PostWhite", (0.80, 0.80, 0.78), 0.0, 0.6)
+    for s in np.arange(0.0, A.TUNNEL_S, 1000.0):
+        km = km0 + s / 1000.0
+        mat = _sign_material(f"km{int(km)}", f"{int(km)}", (320, 200), texdir=texdir)
+        O, T, N, U = _frames_flat(np.array([s])); O, T, N = O[0], T[0], N[0]
+        on_viaduct = A.VIADUCT[0] < s < A.VIADUCT[1]
+        base = O + N * 6.05
+        base[2] = A.RAIL_Z - GIRDER_TOP_BELOW_RAIL + 1.15 if on_viaduct else A.RAIL_Z - 0.85
+        post = setmat(box(f"KmPost{int(km)}", (0.10, 0.10, 0.9), tuple(base + np.array([0, 0, 0.45])), coll), white)
+        pl = _plate(f"KmPlate{int(km)}", 0.48, 0.30, mat, coll)
+        from mathutils import Matrix
+        # plate faces the track: local x along T, local y (plate normal side) along N, z up
+        pl.matrix_world = Matrix(((T[0], N[0], 0, base[0] - N[0] * 0.06), (T[1], N[1], 0, base[1] - N[1] * 0.06), (0, 0, 1, base[2] + 0.62), (0, 0, 0, 1)))
+        objs += [post, pl]
+    # neutral section on the viaduct: 断 board 200 m before, 合 board after (on the masts of the left track)
+    cjk = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+    for s, txt in ((1720.0, "断"), (2010.0, "合")):
+        mat = _sign_material("ns_" + ("off" if txt == "断" else "on"), txt, (256, 256), bg=(250, 250, 250), fg=(12, 12, 12), font=cjk)
+        O, T, N, U = _frames_flat(np.array([s])); O, T, N = O[0], T[0], N[0]
+        p = O + N * 5.35; p[2] = A.RAIL_Z + 4.2
+        from mathutils import Matrix
+        pl = _plate(f"NeutralBoard_{txt}", 0.60, 0.60, mat, coll)
+        pl.matrix_world = Matrix(((-N[0], T[0], 0, p[0]), (-N[1], T[1], 0, p[1]), (0, 0, 1, p[2]), (0, 0, 0, 1)))
+        objs.append(pl)
+    return objs
