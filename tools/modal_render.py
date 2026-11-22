@@ -46,8 +46,8 @@ class Renderer:
 
     @modal.enter()
     def load(self):
+        import bpy                      # must come first: it puts Blender's own modules (addon_utils) on sys.path
         import addon_utils
-        import bpy
         t = time.time()
         bpy.ops.wm.open_mainfile(filepath=f"/scene/{self.blend}")
         addon_utils.enable("cycles", default_set=True)
