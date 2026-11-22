@@ -26,6 +26,14 @@ TEXTURES = [  # (id, res, maps)
     ("brown_mud_02", "2k", ["Diffuse", "Rough", "nor_gl"]),
     ("gravel_floor_02", "2k", ["Diffuse", "Rough", "nor_gl"]),
     ("aerial_grass_rock", "2k", ["Diffuse", "Rough", "nor_gl"]),
+    # village houses (v3): bare red brick, grey clay pantiles, glazed red tiles, facade tiles, grey render
+    ("red_bricks_04", "2k", ["Diffuse", "Rough", "nor_gl"]),
+    ("grey_roof_tiles", "2k", ["Diffuse", "Rough", "nor_gl"]),
+    ("clay_roof_tiles_02", "2k", ["Diffuse", "Rough", "nor_gl"]),
+    ("rectangular_facade_tiles", "2k", ["Diffuse", "Rough", "nor_gl"]),
+    ("plaster_grey_04", "2k", ["Diffuse", "Rough", "nor_gl"]),
+    # farm tracks
+    ("gravel_road", "2k", ["Diffuse", "Rough", "nor_gl"]),
 ]
 MODELS = [("island_tree_01", "1k"), ("island_tree_02", "1k"), ("island_tree_03", "1k"), ("tree_small_02", "1k"),
           ("shrub_01", "1k"), ("shrub_02", "1k"), ("shrub_04", "1k"), ("fern_02", "1k"), ("grass_medium_01", "1k"),

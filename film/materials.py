@@ -169,5 +169,11 @@ def rail_material():
     L(up.outputs[0], rg.inputs[0])
     p = nt.nodes.new("ShaderNodeBsdfPrincipled")
     L(col.outputs["Result"], p.inputs["Base Color"]); L(met.outputs[0], p.inputs["Metallic"]); L(rg.outputs[0], p.inputs["Roughness"])
+    # the running band is polished lengthwise by the wheels: anisotropic highlight stretched along the rail
+    # (sweep UVs: u across the profile, v along the chainage -> UV tangent rotated by 90 degrees)
+    tg = nt.nodes.new("ShaderNodeTangent"); tg.direction_type = "UV_MAP"; tg.uv_map = "UVMap"
+    L(tg.outputs[0], p.inputs["Tangent"])
+    L(up.outputs[0], p.inputs["Anisotropic"])
+    p.inputs["Anisotropic Rotation"].default_value = 0.25
     L(p.outputs[0], out.inputs[0])
     return m

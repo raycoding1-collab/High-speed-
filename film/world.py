@@ -328,7 +328,8 @@ def terrain_material(tex, paddy_img):
     lat1, lat2 = diag(1.0), diag(-1.0)
     latt = nt.nodes.new("ShaderNodeMath"); latt.operation = "MAXIMUM"; L(lat1, latt.inputs[0]); L(lat2, latt.inputs[1])
     cm = nt.nodes.new("ShaderNodeAttribute"); cm.attribute_name = "cutmask"
-    lm = nt.nodes.new("ShaderNodeMath"); lm.operation = "MULTIPLY"; L(latt.outputs[0], lm.inputs[0]); L(cm.outputs["Fac"], lm.inputs[1])
+    lm = nt.nodes.new("ShaderNodeMath"); lm.operation = "MULTIPLY"; L(latt.outputs[0], lm.inputs[0])
+    lm.inputs[1].default_value = 0.0      # v3: the lattice is real geometry now (infra.build_cutting_details)
     cz = nt.nodes.new("ShaderNodeAttribute"); cz.attribute_name = "cutzone"
     hydro = nt.nodes.new("ShaderNodeMix"); hydro.data_type = "RGBA"; hydro.blend_type = "MULTIPLY"; hydro.inputs["Factor"].default_value = 1.0
     hydro.inputs["B"].default_value = (0.55, 0.85, 0.24, 1)                   # hydroseeded slope grass: lush and bright
@@ -489,7 +490,7 @@ def build_river(coll):
     m = bpy.data.materials.new("RiverWater")
     m.use_nodes = True
     nt = m.node_tree; p = nt.nodes["Principled BSDF"]
-    p.inputs["Base Color"].default_value = (0.03, 0.045, 0.035, 1); p.inputs["Roughness"].default_value = 0.04
+    p.inputs["Base Color"].default_value = (0.020, 0.055, 0.045, 1); p.inputs["Roughness"].default_value = 0.04   # green karst river
     p.inputs["IOR"].default_value = 1.33
     geo = nt.nodes.new("ShaderNodeNewGeometry"); wn = nt.nodes.new("ShaderNodeTexWave"); wn.inputs["Scale"].default_value = 0.08
     wn.inputs["Distortion"].default_value = 6
@@ -629,47 +630,116 @@ def _scatter_tree():
     return ng
 
 
-def crown_proxy(name, coll, seed=0):
-    """Mid-distance tree proxy: displaced crown + trunk, leafy shader (no alpha cards)."""
-    import bmesh
-    rng = np.random.default_rng(seed)
-    bm = bmesh.new()
-    bmesh.ops.create_icosphere(bm, subdivisions=3, radius=1.0)
-    for v in bm.verts:
-        p = np.array(v.co)
-        n = 1 + 0.22 * math.sin(3 * p[0] + seed) * math.cos(2.5 * p[1]) + 0.15 * math.sin(4 * p[2] + seed * 2) + rng.uniform(-0.06, 0.06)
-        v.co = (p[0] * n * 1.0, p[1] * n * 1.0, p[2] * n * 0.8 + 1.6)
-    # trunk: the crown sits 0.8 (x scale) above the ground, so without it the trees float above the fields
-    tr = bmesh.ops.create_cone(bm, cap_ends=True, segments=8, radius1=0.13, radius2=0.08, depth=1.5)
-    for v in tr["verts"]:
-        v.co.z += 0.75
-    me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
-    ob = bpy.data.objects.new(name, me); coll.objects.link(ob)
-    for p in ob.data.polygons:
-        p.use_smooth = True
-    m = bpy.data.materials.get("CrownLeaves")
-    if m is None:
-        m = bpy.data.materials.new("CrownLeaves"); m.use_nodes = True
-        nt = m.node_tree; p = nt.nodes["Principled BSDF"]; L = nt.links.new
-        vo = nt.nodes.new("ShaderNodeTexVoronoi"); vo.inputs["Scale"].default_value = 9.0
-        cr = nt.nodes.new("ShaderNodeValToRGB"); cr.color_ramp.elements[0].color = (0.02, 0.05, 0.012, 1); cr.color_ramp.elements[1].color = (0.11, 0.19, 0.04, 1)
-        L(vo.outputs["Distance"], cr.inputs[0]); L(cr.outputs[0], p.inputs["Base Color"])
-        bp = nt.nodes.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = 1.0; bp.inputs["Distance"].default_value = 0.25
-        L(vo.outputs["Distance"], bp.inputs["Height"]); L(bp.outputs[0], p.inputs["Normal"])
-        p.inputs["Roughness"].default_value = 0.75
-        p.inputs["Subsurface Weight"].default_value = 0.15
-        p.inputs["Subsurface Radius"].default_value = (0.3, 0.6, 0.1)
-    ob.data.materials.append(m)
+def _leaf_material(name, c0, c1, vor_scale, bump, sss):
+    m = bpy.data.materials.get(name)
+    if m is not None:
+        return m
+    m = bpy.data.materials.new(name); m.use_nodes = True
+    nt = m.node_tree; p = nt.nodes["Principled BSDF"]; L = nt.links.new
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    vo = nt.nodes.new("ShaderNodeTexVoronoi"); vo.inputs["Scale"].default_value = vor_scale
+    L(tc.outputs["Object"], vo.inputs["Vector"])
+    cr = nt.nodes.new("ShaderNodeValToRGB"); cr.color_ramp.elements[0].color = (*c0, 1); cr.color_ramp.elements[1].color = (*c1, 1)
+    L(vo.outputs["Distance"], cr.inputs[0])
+    # per-tree colour: every instance gets its own green (Object Info > Random), like a real mixed grove
+    oi = nt.nodes.new("ShaderNodeObjectInfo")
+    tint = nt.nodes.new("ShaderNodeValToRGB")
+    e = tint.color_ramp.elements
+    e[0].position = 0.0; e[0].color = (0.80, 0.92, 0.75, 1); e[1].position = 1.0; e[1].color = (1.22, 1.08, 0.80, 1)
+    mid = e.new(0.5); mid.color = (1.0, 1.0, 1.0, 1)
+    L(oi.outputs["Random"], tint.inputs[0])
+    mul = nt.nodes.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs["Factor"].default_value = 1.0
+    L(cr.outputs[0], mul.inputs["A"]); L(tint.outputs[0], mul.inputs["B"]); L(mul.outputs["Result"], p.inputs["Base Color"])
+    bp = nt.nodes.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = 1.0; bp.inputs["Distance"].default_value = bump
+    L(vo.outputs["Distance"], bp.inputs["Height"]); L(bp.outputs[0], p.inputs["Normal"])
+    p.inputs["Roughness"].default_value = 0.75
+    p.inputs["Subsurface Weight"].default_value = sss
+    p.inputs["Subsurface Radius"].default_value = (0.3, 0.6, 0.1)
+    return m
+
+
+def _bark():
     bark = bpy.data.materials.get("CrownBark")
     if bark is None:
         from . import materials as M
         bark = M.principled("CrownBark", (0.045, 0.035, 0.025), 0.0, 0.85)
-    ob.data.materials.append(bark)
+    return bark
+
+
+def _finish_proxy(name, coll, bm, leaf, trunk_test):
+    me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
+    ob = bpy.data.objects.new(name, me); coll.objects.link(ob)
+    for p in ob.data.polygons:
+        p.use_smooth = True
+    ob.data.materials.append(leaf); ob.data.materials.append(_bark())
     zc = np.zeros(len(ob.data.polygons) * 3); ob.data.polygons.foreach_get("center", zc)
     zc = zc.reshape(-1, 3)
-    mi = ((np.hypot(zc[:, 0], zc[:, 1]) < 0.16) & (zc[:, 2] < 1.4)).astype(np.int32)   # trunk faces (near the axis)
-    ob.data.polygons.foreach_set("material_index", mi)
+    ob.data.polygons.foreach_set("material_index", trunk_test(zc).astype(np.int32))
     return ob
+
+
+def _lobe(bm, rng, cx, cy, cz, r, subdiv=2, squash=0.85, rough=0.12):
+    import bmesh
+    ico = bmesh.ops.create_icosphere(bm, subdivisions=subdiv, radius=r)
+    ph = rng.uniform(0, 6, 3)
+    for v in ico["verts"]:
+        p = np.array(v.co) / r
+        n = 1 + rough * math.sin(4.0 * p[0] + ph[0]) * math.cos(3.5 * p[1] + ph[1]) \
+            + 0.7 * rough * math.sin(7.0 * p[2] + ph[2]) + rng.uniform(-0.5, 0.5) * rough
+        v.co = (cx + p[0] * r * n, cy + p[1] * r * n, cz + p[2] * r * n * squash)
+
+
+def crown_proxy(name, coll, seed=0):
+    """Mid-distance broadleaf tree (camphor / banyan type canopy): a cauliflower crown of 12-18 overlapping
+    displaced lobes of different sizes over a main mass (irregular silhouette, no lollipop sphere), crown base low
+    on the trunk, leafy shader with per-tree colour (no alpha cards)."""
+    import bmesh
+    rng = np.random.default_rng(seed)
+    bm = bmesh.new()
+    _lobe(bm, rng, 0.0, 0.0, 1.5, 0.72, subdiv=3, rough=0.10)
+    for k in range(int(rng.integers(12, 19))):
+        a = rng.uniform(0, 2 * math.pi); rad = rng.uniform(0.3, 0.85)
+        top = rng.random() < 0.45
+        cz = 1.5 + (rng.uniform(0.35, 0.85) if top else rng.uniform(-0.35, 0.4)) * (1 - 0.35 * rad)
+        _lobe(bm, rng, rad * math.cos(a), rad * math.sin(a), cz, rng.uniform(0.26, 0.52), subdiv=2, rough=0.16)
+    tr = bmesh.ops.create_cone(bm, cap_ends=True, segments=8, radius1=0.13, radius2=0.07, depth=1.6)
+    for v in tr["verts"]:
+        v.co.z += 0.8
+    leaf = _leaf_material("CrownLeaves", (0.02, 0.05, 0.012), (0.11, 0.19, 0.04), 9.0, 0.25, 0.15)
+    return _finish_proxy(name, coll, bm, leaf, lambda zc: (np.hypot(zc[:, 0], zc[:, 1]) < 0.16) & (zc[:, 2] < 1.2))
+
+
+def bamboo_proxy(name, coll, seed=0):
+    """Clumping bamboo (Bambusa, the feathery groves along Guangxi rivers and around villages): 16-24 culms rise
+    from one root clump, arch outwards and droop at the tips; the fine foliage is a chain of small soft lobes along
+    the upper two thirds of every culm, giving the tall fountain-shaped, feathery mass seen from a distance."""
+    import bmesh
+    rng = np.random.default_rng(seed)
+    bm = bmesh.new()
+    H = 2.9
+    for k in range(int(rng.integers(16, 25))):
+        a = rng.uniform(0, 2 * math.pi)
+        lean = rng.uniform(0.35, 1.05)                      # how far the culm arches outwards (x H)
+        h = H * rng.uniform(0.75, 1.0)
+        b0 = np.array([0.18 * math.cos(a), 0.18 * math.sin(a), 0.0])
+        out = np.array([math.cos(a), math.sin(a), 0.0])
+        def P(t):                                           # quadratic arch: up, outwards, tip drooping
+            return b0 + out * lean * h * t ** 1.6 + np.array([0, 0, h * (1.15 * t - 0.25 * t ** 3)])
+        pts = [P(t) for t in np.linspace(0, 1, 8)]
+        for p0, p1 in zip(pts[:3], pts[1:4]):              # bare lower culm
+            cul = bmesh.ops.create_cone(bm, cap_ends=False, segments=5, radius1=0.03, radius2=0.025,
+                                        depth=float(np.linalg.norm(p1 - p0)))
+            d = (p1 - p0) / (np.linalg.norm(p1 - p0) + 1e-9)
+            u = np.cross(d, (0, 0, 1.0)); u = u / (np.linalg.norm(u) + 1e-9) if np.linalg.norm(u) > 1e-6 else np.array([1.0, 0, 0])
+            w = np.cross(d, u); c = (p0 + p1) / 2
+            for v in cul["verts"]:
+                q = np.array(v.co); v.co = tuple(c + q[0] * u + q[1] * w + q[2] * d)
+        for t in np.linspace(0.18, 1.0, int(rng.integers(11, 16))):
+            c = P(t) + rng.normal(0, 0.07, 3)
+            _lobe(bm, rng, c[0], c[1], c[2], 0.13 + 0.13 * math.sin(math.pi * min(t, 0.95)) * rng.uniform(0.8, 1.2),
+                  subdiv=1, squash=0.8, rough=0.22)
+    leaf = _leaf_material("BambooLeaves", (0.05, 0.10, 0.015), (0.20, 0.27, 0.05), 22.0, 0.08, 0.25)
+    return _finish_proxy(name, coll, bm, leaf, lambda zc: np.zeros(len(zc), bool))
 
 
 def sample_surface(obj_list, density, rng, filt=None, max_n=200000, tri_filter=None):
@@ -772,67 +842,41 @@ def build_haze(coll, layers=((-12, 24, 0.00062), (24, 900, 0.000085)),
     return objs
 
 
-def build_village(coll, n=26, centre_s=2700.0, lat=-300.0, seed=4, spread_s=260.0, spread_l=(-120.0, 90.0), name="Village"):
-    """Rural Guangxi village: 2-3 storey concrete houses, white tile / grey render, dark tile or flat roofs."""
-    from .trainparts import box, setmat, join
+def build_village(coll, assets, n=26, centre_s=2700.0, lat=-300.0, seed=4, spread_s=260.0, spread_l=(-120.0, 90.0),
+                  name="Village", hamlet=False):
+    """Rural Guangxi village from the house kit in film/village.py (five building types, real openings,
+    balconies, tiled / pantile roofs, solar water heaters, walled yards).  Houses stand 17 m apart or more,
+    face the village street (either side), and avoid ground that slopes more than 3 m across a house."""
+    from . import village as V
     rng = np.random.default_rng(seed)
-    wall_m = bpy.data.materials.get("HouseWall")
-    if wall_m is None:
-        wall_m = bpy.data.materials.new("HouseWall"); wall_m.use_nodes = True
-        nt = wall_m.node_tree; p = nt.nodes["Principled BSDF"]; L = nt.links.new
-        geo = nt.nodes.new("ShaderNodeNewGeometry"); sep = nt.nodes.new("ShaderNodeSeparateXYZ"); L(geo.outputs["Position"], sep.inputs[0])
-        # windows: regular grid in world coordinates (3.2 m storey, 3 m bays)
-        def grid(axis, per, width):
-            m1 = nt.nodes.new("ShaderNodeMath"); m1.operation = "PINGPONG"; m1.inputs[1].default_value = per / 2; L(sep.outputs[axis], m1.inputs[0])
-            m2 = nt.nodes.new("ShaderNodeMath"); m2.operation = "LESS_THAN"; m2.inputs[1].default_value = width; L(m1.outputs[0], m2.inputs[0])
-            return m2.outputs[0]
-        wz = grid("Z", 3.2, 0.75); wx = grid("X", 3.0, 0.55); wy = grid("Y", 3.0, 0.55)
-        mx = nt.nodes.new("ShaderNodeMath"); mx.operation = "MAXIMUM"; L(wx, mx.inputs[0]); L(wy, mx.inputs[1])
-        win = nt.nodes.new("ShaderNodeMath"); win.operation = "MULTIPLY"; L(wz, win.inputs[0]); L(mx.outputs[0], win.inputs[1])
-        col = nt.nodes.new("ShaderNodeMix"); col.data_type = "RGBA"
-        col.inputs["A"].default_value = (0.62, 0.60, 0.55, 1); col.inputs["B"].default_value = (0.03, 0.035, 0.04, 1)
-        L(win.outputs[0], col.inputs["Factor"]); L(col.outputs["Result"], p.inputs["Base Color"])
-        rg = nt.nodes.new("ShaderNodeMapRange"); rg.inputs[3].default_value = 0.8; rg.inputs[4].default_value = 0.08
-        L(win.outputs[0], rg.inputs[0]); L(rg.outputs[0], p.inputs["Roughness"])
-    roof_m = bpy.data.materials.get("HouseRoof") or None
-    if roof_m is None:
-        from . import materials as M
-        roof_m = M.principled("HouseRoof", (0.09, 0.085, 0.08), 0.0, 0.7)
-    parts = []
-    cs = centre_s
-    for i in range(n):
-        s = cs + rng.uniform(-spread_s, spread_s); l = lat + rng.uniform(*spread_l)
+    yaw_v = A.heading(centre_s) + rng.choice([0.0, math.pi / 2]) + rng.uniform(-0.3, 0.3)
+    sites = []
+    tries = 0
+    while len(sites) < n and tries < 40 * n:
+        tries += 1
+        s = centre_s + rng.uniform(-spread_s, spread_s); l = lat + rng.uniform(*spread_l)
         th = A.heading(s); x0, y0 = A.xy(s)
         x = x0 - math.sin(th) * l; y = y0 + math.cos(th) * l
-        g = float(natural_ground(np.array([x]), np.array([y]))[0])
-        fl = rng.choice([2, 3, 3, 4]); w = rng.uniform(9, 13); d = rng.uniform(10, 14); h = 3.2 * fl
-        b = setmat(box("house", (w, d, h), (x, y, g + h / 2), coll, 0.0), wall_m)
-        b.rotation_euler = (0, 0, th + rng.choice([0, math.pi / 2]) + rng.uniform(-0.1, 0.1))
-        parts.append(b)
-        if rng.random() < 0.65:
-            # gable roof of dark grey tiles (two sloping slabs)
-            for sgn in (1, -1):
-                r = setmat(box("roof", (w + 0.6, d / 2 + 0.5, 0.18), (0, 0, 0), coll), roof_m)
-                import mathutils
-                M = mathutils.Matrix.Translation((x, y, g + h + 1.0)) @ mathutils.Matrix.Rotation(b.rotation_euler.z, 4, "Z") \
-                    @ mathutils.Matrix.Translation((0, sgn * d / 4, 0)) @ mathutils.Matrix.Rotation(sgn * math.radians(-24), 4, "X")
-                r.matrix_basis = M; parts.append(r)
-        else:
-            r = setmat(box("roof", (w + 0.3, d + 0.3, 0.3), (x, y, g + h + 0.15), coll), roof_m)
-            r.rotation_euler = b.rotation_euler.copy(); parts.append(r)
-            st = setmat(box("stair", (3.0, 3.0, 2.8), (x, y, g + h + 1.4), coll, 0.0), wall_m)
-            st.rotation_euler = b.rotation_euler.copy(); parts.append(st)
-    ob = join(parts, name); coll.objects.link(ob)
-    return ob
+        if any(math.hypot(x - q[0], y - q[1]) < 17.0 for q in sites):
+            continue
+        if not _clear_of_features(np.array([x]), np.array([y]), 12.0)[0]:      # not in the river / on a tower foot
+            continue
+        cx = x + np.array([-7, 7, 7, -7, 0]); cy = y + np.array([-7, -7, 7, 7, 0])
+        gz = natural_ground(cx, cy)
+        if gz.max() - gz.min() > 3.0:
+            continue
+        yaw = yaw_v + rng.choice([0.0, math.pi]) + rng.normal(0, 0.06)
+        sites.append((x, y, float(gz.min()), yaw))
+    return V.place(coll, assets, sites, rng, hamlet=hamlet, name=name)
 
 
-def _clear_of_features(x, y, margin=40.0):
+def _clear_of_features(x, y, margin=40.0, river=30.0):
     """True where (x, y) is on the open valley floor: away from karst towers, the river and the hills."""
     x = np.asarray(x, float); y = np.asarray(y, float)
     ok = np.ones(x.shape, bool)
     for i, (tx, ty, H, R) in enumerate(TOWERS):
         ok &= np.hypot(x - tx, y - ty) > 1.25 * R + margin
-    ok &= np.abs(x - RIVER_X(y + 500)) > 30.0
+    ok &= np.abs(x - RIVER_X(y + 500)) > river
     ok &= natural_ground(x, y) < 6.0
     return ok
 
@@ -868,7 +912,7 @@ def valley_tree_points(rng, hamlets, scale=1.0):
     cx = rng.uniform(-1400, 4400, nc * 3); cy = rng.uniform(-1700, 2300, nc * 3)
     k = _clear_of_features(cx, cy, 25.0); cx, cy = cx[k][:nc], cy[k][:nc]
     for x0, y0 in zip(cx, cy):
-        m = int(rng.integers(6, 34)); r = rng.uniform(6, 24)
+        m = int(rng.integers(8, 40)); r = rng.uniform(5, 15)
         add(x0 + rng.normal(0, r, m), y0 + rng.normal(0, r * rng.uniform(0.4, 1.0), m))
     # river banks
     t = np.arange(-1500, 2500, 5.5)
@@ -887,7 +931,7 @@ def valley_tree_points(rng, hamlets, scale=1.0):
     nl = int(500 * scale)
     add(rng.uniform(-1400, 4400, nl), rng.uniform(-1700, 2300, nl))
     P = np.concatenate(pts)
-    keep = _clear_of_features(P[:, 0], P[:, 1], 6.0)
+    keep = _clear_of_features(P[:, 0], P[:, 1], 6.0, river=21.0)      # bank groves stand right at the water
     s, lat = A.nearest_s(P[:, 0], P[:, 1])
     keep &= np.abs(lat) > 22.0                                   # nothing growing on/next to the viaduct
     P = P[keep]
@@ -1015,3 +1059,108 @@ def build_mist_layers(coll, heights=(4.0, 5.2, 6.6, 8.2, 10.0, 12.0, 14.3, 16.9,
         ob.visible_glossy = True
         objs.append(ob)
     return objs
+
+
+# ------------------------------------------------------------------ v3: farm roads, roadside ditches, river banks
+def _ribbon(name, coll, xs, ys, prof, mat, z_fn, uv_scale=1.0):
+    """Ribbon draped on the ground along a polyline: prof = [(offset_m, dz_m), ...] across the path."""
+    dx = np.gradient(xs); dy = np.gradient(ys); n = np.hypot(dx, dy) + 1e-9
+    nx, ny = -dy / n, dx / n
+    along = np.concatenate([[0], np.cumsum(np.hypot(np.diff(xs), np.diff(ys)))])
+    V = []
+    for k in range(len(xs)):
+        for (o, dz) in prof:
+            px, py = xs[k] + nx[k] * o, ys[k] + ny[k] * o
+            V.append((px, py, 0.0, dz))
+    V = np.array(V)
+    V[:, 2] = z_fn(V[:, 0], V[:, 1]) + V[:, 3]
+    m = len(prof)
+    F, UV = [], []
+    for k in range(len(xs) - 1):
+        for j in range(m - 1):
+            a = k * m + j
+            F.append((a, a + 1, a + m + 1, a + m))
+            UV += [(prof[j][0] * uv_scale, along[k] * uv_scale), (prof[j + 1][0] * uv_scale, along[k] * uv_scale),
+                   (prof[j + 1][0] * uv_scale, along[k + 1] * uv_scale), (prof[j][0] * uv_scale, along[k + 1] * uv_scale)]
+    ob = new_mesh_object(name, V[:, :3], F, coll, smooth=True, uvs=np.array(UV))
+    ob.data.materials.append(mat)
+    return ob
+
+
+def build_roads(coll, tex, hamlets):
+    """Concrete village roads (3.5 m, the 'every village connected' standard) on a low embankment, linking the
+    hamlets and the main village along a minimum spanning tree (no river crossings, around the towers), each with
+    a water-filled irrigation ditch on one side.  Plus muddy, pebbly banks along both sides of the river."""
+    from . import infra
+    rng = np.random.default_rng(77)
+    th = float(A.heading(2700.0)); vx, vy = (float(v) for v in A.xy(2700.0))
+    nodes = [(vx + math.sin(th) * 300.0, vy - math.cos(th) * 300.0)] + [(h[2], h[3]) for h in hamlets]
+    nodes = np.array(nodes)
+    side_of_river = np.sign(nodes[:, 0] - RIVER_X(nodes[:, 1] + 500))
+    # Prim's MST on distance, edges that cross the river or run into a tower are not allowed
+    def path(a, b):
+        L = float(np.hypot(*(nodes[b] - nodes[a])))
+        t = np.linspace(0, 1, max(int(L / 4.0), 3))
+        px = nodes[a][0] + (nodes[b][0] - nodes[a][0]) * t
+        py = nodes[a][1] + (nodes[b][1] - nodes[a][1]) * t
+        # gentle meander like a road following field boundaries
+        nxp, nyp = -(nodes[b][1] - nodes[a][1]) / L, (nodes[b][0] - nodes[a][0]) / L
+        amp = rng.uniform(15, 40) * np.sin(np.pi * t) * np.sin(2 * np.pi * t * rng.uniform(0.5, 1.5) + rng.uniform(0, 6))
+        return px + nxp * amp, py + nyp * amp
+    def ok(px, py):
+        s, lat = A.nearest_s(px, py)
+        good = _clear_of_features(px, py, 8.0, river=24.0) | (np.abs(lat) < 40)
+        return bool(good.all())
+    road_mat = infra.concrete("RoadConcrete", tex.get("concrete"), (0.92, 0.90, 0.86), 0.25, streaks=False)
+    ditch_mat = bpy.data.materials.get("RiverWater")
+    tree_ = {0}
+    edges = []
+    while len(tree_) < len(nodes):
+        best = None
+        for a in tree_:
+            for b in range(len(nodes)):
+                if b in tree_ or side_of_river[a] != side_of_river[b]:
+                    continue
+                d = float(np.hypot(*(nodes[b] - nodes[a])))
+                if best is None or d < best[0]:
+                    best = (d, a, b)
+        if best is None:                          # the rest is across the river: start a second tree there
+            rest = [b for b in range(len(nodes)) if b not in tree_]
+            tree_.add(rest[0]); continue
+        tree_.add(best[2]); edges.append((best[1], best[2]))
+    obs = []
+    prof = [(-2.9, -0.25), (-1.75, 0.18), (1.75, 0.18), (2.9, -0.25)]
+    ditch = [(3.3, -0.05), (4.2, -0.05)]
+    def zf(x, y):
+        return natural_ground(x, y)
+    for k, (a, b) in enumerate(edges):
+        for attempt in range(4):
+            px, py = path(a, b)
+            if ok(px, py):
+                break
+        else:
+            continue
+        s, lat = A.nearest_s(px, py)
+        keep = np.abs(lat) > 16.0                                     # pass under the viaduct, not through piers
+        if keep.sum() < 3:
+            continue
+        obs.append(_ribbon(f"Road{k}", coll, px, py, prof, road_mat, zf, uv_scale=0.25))
+        if ditch_mat is not None:
+            obs.append(_ribbon(f"RoadDitch{k}", coll, px, py, ditch, ditch_mat, zf))
+    # river banks: mud and pebbles from just under the water line up the bank
+    mud = infra.concrete("RiverBankMud", tex.get("mud"), (0.80, 0.74, 0.62), 0.5, streaks=False)
+    t = np.linspace(-1500, 2500, 800)
+    xr = RIVER_X(t); yr = t - 500
+    width = 34 + 6 * np.sin(t / 200)
+    for sgn in (-1, 1):
+        dx = np.gradient(xr); dy = np.gradient(yr); n = np.hypot(dx, dy)
+        nx, ny = -dy / n, dx / n
+        xs = xr + nx * sgn * (width / 2); ys = yr + ny * sgn * (width / 2)
+        pb = [(-sgn * 1.5, -0.35), (0.0, 0.03), (sgn * 1.8, 0.03), (sgn * 3.6, 0.02)]
+        if sgn < 0:
+            pb = pb[::-1]
+        def zb(x, y):
+            return np.maximum(natural_ground(x, y), -0.6)
+        obs.append(_ribbon(f"RiverBank{sgn:+d}", coll, xs, ys, pb, mud, zb, uv_scale=0.5))
+    print(f"[build]   roads: {len(edges)} links, river banks", flush=True)
+    return obs

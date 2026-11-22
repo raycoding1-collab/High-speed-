@@ -78,5 +78,11 @@ def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grad
                 if s.name == nm and s.type == "RGBA":
                     s.default_value = v
         L(img, cb.inputs["Image"]); img = cb.outputs["Image"]
+        # real-lens lateral chromatic aberration: radial dispersion, zero at the centre, ~1 px at the frame edges
+        ld = N.new("CompositorNodeLensdist")
+        for nm, v in (("Distortion", 0.0), ("Dispersion", 0.003)):
+            if nm in ld.inputs:
+                ld.inputs[nm].default_value = v
+        L(img, ld.inputs["Image"]); img = ld.outputs["Image"]
     L(img, out.inputs["Image"])
     return ng

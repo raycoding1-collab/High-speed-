@@ -186,7 +186,8 @@ def build_train(texdir, coll=None, raised_panto_car=6, with_interior=True):
             ib.location = (icx, 0, 0)
             ib.parent = ob
             if kind == "end":
-                cab = P.build_cab(f"Car{i}_cab", coll, X_origin); cab.parent = ob
+                from . import cab as CAB
+                cab = CAB.build_cab(f"Car{i}_cab", coll, X_origin, texdir); cab.parent = ob
                 wip = P.build_wiper(f"Car{i}_wiper", coll, X_origin); wip.parent = ob
                 dfl = P.build_deflector(f"Car{i}_deflector", coll, X_origin); dfl.parent = ob
                 emb = P.build_emblem(f"Car{i}_emblem", coll, X_origin); emb.parent = ob

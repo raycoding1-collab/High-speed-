@@ -80,7 +80,8 @@ jobs:
           n = int("${{ inputs.jobs }}")
           print("matrix=" + json.dumps(list(range(n))))
           print("first=1")
-          print("last=1560")
+          import sys; sys.path.insert(0, "."); from film import shots as SH
+          print(f"last={SH.timeline(SH.build_shots())[-1][2]}")
           PY
       - uses: actions/upload-artifact@v4
         with:

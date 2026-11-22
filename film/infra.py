@@ -79,7 +79,7 @@ def place(ob, s, offset=0.0, canted=False, up=0.0, yaw=0.0):
 
 
 # ------------------------------------------------------------------ materials
-def concrete(name="Concrete", tex=None, tint=(1, 1, 1), scale=0.25, rough_add=0.0):
+def concrete(name="Concrete", tex=None, tint=(1, 1, 1), scale=0.25, rough_add=0.0, cell=None, streaks=True, hab=False):
     m = bpy.data.materials.get(name)
     if m:
         return m
@@ -110,9 +110,12 @@ def concrete(name="Concrete", tex=None, tint=(1, 1, 1), scale=0.25, rough_add=0.
         L(d.outputs["Color"], hs.inputs["Color"]); L(hs.outputs["Color"], tintn.inputs["A"]); L(tintn.outputs["Result"], mul.inputs["A"])
         cmb = nt.nodes.new("ShaderNodeCombineColor"); L(mr.outputs[0], cmb.inputs[0]); L(mr.outputs[0], cmb.inputs[1]); L(mr.outputs[0], cmb.inputs[2])
         L(cmb.outputs[0], mul.inputs["B"])
-        L(mul.outputs["Result"], p.inputs["Base Color"])
+        col = mul.outputs["Result"]
+        rough = r.outputs["Color"]
+        col, rough = _weathering(nt, col, rough, cell, streaks, hab)
+        L(col, p.inputs["Base Color"])
         ra = nt.nodes.new("ShaderNodeMath"); ra.operation = "ADD"; ra.inputs[1].default_value = rough_add
-        L(r.outputs["Color"], ra.inputs[0]); L(ra.outputs[0], p.inputs["Roughness"])
+        L(rough, ra.inputs[0]); L(ra.outputs[0], p.inputs["Roughness"])
         nm = nt.nodes.new("ShaderNodeNormalMap"); nm.inputs["Strength"].default_value = 0.8
         L(n.outputs["Color"], nm.inputs["Color"]); L(nm.outputs[0], p.inputs["Normal"])
     else:
@@ -121,6 +124,68 @@ def concrete(name="Concrete", tex=None, tint=(1, 1, 1), scale=0.25, rough_add=0.
     L(p.outputs[0], out.inputs[0])
     return m
 
+
+
+def _weathering(nt, col, rough, cell=None, streaks=True, hab=False):
+    """Real-concrete weathering on top of the photo texture (all cheap procedural nodes, no extra rays):
+    - element-to-element tone (each 32 m girder span / parapet segment by chainage, each pier by world cell),
+    - rain-runoff streaks on vertical faces (dark dirt streaks, a few pale efflorescence streaks), patchy,
+    - splash / soil / moss zone at the foot of the piers (vertex attribute 'hab' = height above ground)."""
+    L = nt.links.new
+    def node(t, **kw):
+        n = nt.nodes.new(t)
+        for k, v in kw.items():
+            setattr(n, k, v)
+        return n
+    def math(op, a, b=None, clamp=False):
+        n = node("ShaderNodeMath", operation=op, use_clamp=clamp)
+        for i, x in enumerate((a, b)):
+            if x is None:
+                continue
+            if isinstance(x, (int, float)):
+                n.inputs[i].default_value = x
+            else:
+                L(x, n.inputs[i])
+        return n.outputs[0]
+    def scale_col(c, f):
+        n = node("ShaderNodeVectorMath", operation="SCALE"); L(c, n.inputs[0]); L(f, n.inputs["Scale"]); return n.outputs[0]
+    tc = node("ShaderNodeTexCoord"); geo = node("ShaderNodeNewGeometry")
+    if cell == "uv32":
+        sep = node("ShaderNodeSeparateXYZ"); L(tc.outputs["UV"], sep.inputs[0])
+        k = math("FLOOR", math("DIVIDE", sep.outputs["Y"], 32.0))
+        wn = node("ShaderNodeTexWhiteNoise", noise_dimensions="1D"); L(k, wn.inputs["W"])
+        col = scale_col(col, math("ADD", math("MULTIPLY", wn.outputs["Value"], 0.16), 0.92))
+    elif cell == "world":
+        vo = node("ShaderNodeTexVoronoi"); vo.inputs["Scale"].default_value = 1.0 / 30.0
+        L(geo.outputs["Position"], vo.inputs["Vector"])
+        sepc = node("ShaderNodeSeparateColor"); L(vo.outputs["Color"], sepc.inputs[0])
+        col = scale_col(col, math("ADD", math("MULTIPLY", sepc.outputs[0], 0.16), 0.92))
+    if streaks:
+        sepn = node("ShaderNodeSeparateXYZ"); L(geo.outputs["Normal"], sepn.inputs[0])
+        vert = math("SUBTRACT", 1.0, math("ABSOLUTE", sepn.outputs["Z"]))
+        vmask = node("ShaderNodeMapRange"); L(vert, vmask.inputs[0]); vmask.inputs[1].default_value = 0.75; vmask.inputs[2].default_value = 0.97
+        mp = node("ShaderNodeMapping"); mp.inputs["Scale"].default_value = (2.6, 2.6, 0.07)
+        L(geo.outputs["Position"], mp.inputs["Vector"])
+        nz = node("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = 1.0; nz.inputs["Detail"].default_value = 5.0
+        L(mp.outputs[0], nz.inputs["Vector"])
+        dark = node("ShaderNodeMapRange"); L(nz.outputs["Fac"], dark.inputs[0]); dark.inputs[1].default_value = 0.52; dark.inputs[2].default_value = 0.80
+        pale = node("ShaderNodeMapRange"); L(nz.outputs["Fac"], pale.inputs[0]); pale.inputs[1].default_value = 0.30; pale.inputs[2].default_value = 0.16
+        patch = node("ShaderNodeTexNoise"); patch.inputs["Scale"].default_value = 0.035; patch.inputs["Detail"].default_value = 2.0
+        L(geo.outputs["Position"], patch.inputs["Vector"])
+        pm = node("ShaderNodeMapRange"); L(patch.outputs["Fac"], pm.inputs[0]); pm.inputs[1].default_value = 0.35; pm.inputs[2].default_value = 0.65
+        amt = math("MULTIPLY", vmask.outputs[0], math("ADD", math("MULTIPLY", pm.outputs[0], 0.7), 0.3))
+        d = math("MULTIPLY", math("MULTIPLY", dark.outputs[0], amt), 0.30)
+        e = math("MULTIPLY", math("MULTIPLY", pale.outputs[0], amt), 0.10)
+        col = scale_col(col, math("ADD", math("SUBTRACT", 1.0, d), e))
+        rough = math("ADD", rough, math("MULTIPLY", d, -0.3))       # wet-dark streaks are slightly smoother
+    if hab:
+        at = node("ShaderNodeAttribute", attribute_name="hab")
+        foot = node("ShaderNodeMapRange"); L(at.outputs["Fac"], foot.inputs[0])
+        foot.inputs[1].default_value = 2.2; foot.inputs[2].default_value = 0.0
+        soil = node("ShaderNodeMix", data_type="RGBA", blend_type="MULTIPLY")
+        L(foot.outputs[0], soil.inputs["Factor"]); L(col, soil.inputs["A"]); soil.inputs["B"].default_value = (0.55, 0.52, 0.40, 1)
+        col = soil.outputs["Result"]
+    return col, rough
 
 # ------------------------------------------------------------------ profiles
 def girder_profile():
@@ -153,7 +218,7 @@ def rail_profile():
 
 # ------------------------------------------------------------------ builders
 def build_viaduct(coll, tex):
-    con = concrete("ViaductConcrete", tex.get("concrete"), (0.95, 0.94, 0.90), 0.22)
+    con = concrete("ViaductConcrete", tex.get("concrete"), (0.95, 0.94, 0.90), 0.22, cell="uv32")
     s0, s1 = A.VIADUCT
     spans = np.arange(s0, s1 - 1, S.GIRDER_SPAN)
     objs = []
@@ -167,10 +232,10 @@ def build_viaduct(coll, tex):
 
 
 def build_piers(coll, tex, ground_fn):
-    con = concrete("PierConcrete", tex.get("concrete"), (0.92, 0.91, 0.88), 0.2)
+    con = concrete("PierConcrete", tex.get("concrete"), (0.92, 0.91, 0.88), 0.2, cell="world", hab=True)
     s0, s1 = A.VIADUCT
     joints = np.arange(s0 + S.GIRDER_SPAN, s1 - 1, S.GIRDER_SPAN)
-    verts, faces = [], []
+    verts, faces, habs = [], [], []
     top = A.RAIL_Z - GIRDER_TOP_BELOW_RAIL - S.GIRDER_DEPTH - 0.25      # underside of bearings
     nseg = 12
     for s in joints:
@@ -200,14 +265,17 @@ def build_piers(coll, tex, ground_fn):
             if ri == 0:
                 ring = [O + (p - O) * np.array([1, 1, 1]) for p in ring]
             verts.extend(ring)
+            habs.extend([float(p[2] - g) for p in ring])
         for ri in range(len(rings) - 1):
             for j in range(rl):
                 j2 = (j + 1) % rl
                 faces.append((base + ri * rl + j, base + ri * rl + j2, base + (ri + 1) * rl + j2, base + (ri + 1) * rl + j))
-        c = len(verts); verts.append(np.mean(rings[-1], axis=0))
+        c = len(verts); verts.append(np.mean(rings[-1], axis=0)); habs.append(float(top - g))
         for j in range(rl):
             faces.append((base + (len(rings) - 1) * rl + j, base + (len(rings) - 1) * rl + (j + 1) % rl, c))
     ob = new_mesh_object("Piers", np.array(verts), faces, coll, smooth=True)
+    at = ob.data.attributes.new("hab", "FLOAT", "POINT")                 # height above the ground at that pier
+    at.data.foreach_set("value", np.asarray(habs, np.float32))
     _box_uv(ob)
     ob.data.materials.append(con)
     return ob
@@ -230,8 +298,8 @@ def _box_uv(ob, scale=1.0):
 
 def build_track(coll, tex, s0, s1):
     """Base plates, SCC layer, CRTS III slabs, rails, fasteners for both tracks."""
-    con = concrete("SlabConcrete", tex.get("slab"), (0.97, 0.96, 0.93), 0.3)
-    base_m = concrete("BaseConcrete", tex.get("concrete"), (0.80, 0.79, 0.76), 0.3, 0.05)
+    con = concrete("SlabConcrete", tex.get("slab"), (0.97, 0.96, 0.93), 0.3, streaks=False)
+    base_m = concrete("BaseConcrete", tex.get("concrete"), (0.80, 0.79, 0.76), 0.3, 0.05, streaks=False)
     rail_m = M.rail_material()
     fast_m = M.principled("Fastener", (0.05, 0.05, 0.05), 0.4, 0.55)
     clip_m = M.principled("FastenerClip", (0.30, 0.31, 0.32), 1.0, 0.45)
@@ -579,4 +647,107 @@ def build_signs(coll, texdir, km0=1186.0):
         pl = _plate(f"NeutralBoard_{txt}", 0.60, 0.60, mat, coll)
         pl.matrix_world = Matrix(((-N[0], T[0], 0, p[0]), (-N[1], T[1], 0, p[1]), (0, 0, 1, p[2]), (0, 0, 0, 1)))
         objs.append(pl)
+    return objs
+
+
+# ------------------------------------------------------------------ cutting details (v3)
+LATTICE_PITCH = 5.0          # diamond frame lines s +/- lat = 5 k (same layout as the old painted lattice)
+
+
+def on_lattice(s, lat, half_w=0.45):
+    """True where (s, lat) lies on a lattice beam (used to keep grass tufts off the concrete)."""
+    out = np.zeros(np.shape(s), bool)
+    for f in (1.0, -1.0):
+        c = s + f * lat
+        d = np.abs(c - LATTICE_PITCH * np.round(c / LATTICE_PITCH)) / math.sqrt(2)
+        out |= d < half_w
+    return out
+
+
+def _cut_points(s, lat):
+    from . import world as W
+    th = A.heading(s); x0, y0 = A.xy(s)
+    x = x0 - np.sin(th) * lat; y = y0 + np.cos(th) * lat
+    nat = W.natural_ground(x, y)
+    g = W.formation(s, lat, nat)
+    return x, y, g, nat
+
+
+def build_cutting_details(coll, tex):
+    """Real geometry for the cutting (S7 / S9 are shot inside it):
+    - precast concrete diamond lattice frames on the cut slopes: 0.40 m wide beams standing 0.15 m proud of the
+      soil (embedded 0.15 m), in 5 m diamonds, up to 15 m above rail level, so the low sun throws real shadows;
+    - concrete-lined side drains (0.8 x 0.5 m U-channels) at the toe of both slopes;
+    - a crushed-stone cess between the slab-track base and the drain."""
+    con = concrete("LatticeConcrete", tex.get("concrete"), (0.86, 0.85, 0.81), 0.5)
+    s0, s1 = A.VIADUCT[1], A.TUNNEL_S - 16.0
+    w, h_top, h_bot = 0.40, 0.15, -0.15
+    V, F, UV = [], [], []
+    for side in (1.0, -1.0):
+        for f in (1.0, -1.0):
+            cs = np.arange(LATTICE_PITCH * math.floor((s0 - 40) / LATTICE_PITCH), s1 + 40, LATTICE_PITCH)
+            for c in cs:
+                lat = side * np.arange(7.25, 32.0, 0.4)
+                s = c - f * lat
+                x, y, g, nat = _cut_points(s, lat)
+                ok = (s > s0) & (s < s1) & (nat > g + 0.3) & (g < A.RAIL_Z + 15.0)
+                if ok.sum() < 3:
+                    continue
+                # contiguous runs
+                idx = np.flatnonzero(ok)
+                runs = np.split(idx, np.flatnonzero(np.diff(idx) > 1) + 1)
+                for r in runs:
+                    if len(r) < 3:
+                        continue
+                    ss, ll = s[r], lat[r]
+                    e = np.array([1.0, f * side]) / math.sqrt(2)          # across the beam, in (s, |lat|) space
+                    rows = []
+                    for k in (-1, 1):
+                        sk = ss + k * w / 2 * e[0]; lk = ll + k * w / 2 * e[1] * side
+                        xk, yk, gk, _ = _cut_points(sk, lk)
+                        rows.append((xk, yk, gk))
+                    m = len(r)
+                    base = len(V)
+                    for i in range(m):
+                        for (xk, yk, gk) in rows:
+                            V.append((xk[i], yk[i], gk[i] + h_top))
+                        for (xk, yk, gk) in rows:
+                            V.append((xk[i], yk[i], gk[i] + h_bot))
+                    # vertex layout per i: 0 L_top, 1 R_top, 2 L_bot, 3 R_bot
+                    along = np.concatenate([[0], np.cumsum(np.hypot(np.diff(ss), np.diff(ll)) * 1.0)])
+                    for i in range(m - 1):
+                        a, b = base + 4 * i, base + 4 * (i + 1)
+                        for quad, u0, u1 in (((a, a + 1, b + 1, b), 0.0, w), ((a + 2, a, b, b + 2), -0.3, 0.0),
+                                             ((a + 1, a + 3, b + 3, b + 1), w, w + 0.3)):
+                            F.append(quad)
+                            UV += [(u0, along[i]), (u1, along[i]), (u1, along[i + 1]), (u0, along[i + 1])]
+                    for (a0) in (base, base + 4 * (m - 1)):
+                        F.append((a0, a0 + 1, a0 + 3, a0 + 2)); UV += [(0, 0), (w, 0), (w, 0.3), (0, 0.3)]
+    ob = new_mesh_object("SlopeLattice", np.array(V), F, coll, smooth=False, uvs=np.array(UV))
+    ob.data.materials.append(con)
+    log_n = len(F)
+    # side drains + cess (sweeps relative to rail level on the centre line)
+    from . import world as W
+    ss = np.arange(s0, s1, 2.0)
+    _, _, _, nat = _cut_points(ss, np.full(len(ss), 7.5))
+    cut = ss[nat > A.RAIL_Z - 0.85 + 0.4]
+    objs = [ob]
+    if len(cut) > 2:
+        c0, c1 = float(cut.min()) + 6.0, float(min(cut.max(), A.TUNNEL_S - 14.5))
+        drain = concrete("DrainConcrete", tex.get("concrete"), (0.80, 0.79, 0.75), 0.5)
+        cess = concrete("CessGravel", tex.get("gravel"), (0.85, 0.83, 0.80), 0.6, streaks=False)
+        for side in (1.0, -1.0):
+            prof = [(5.75, -0.80), (5.85, -0.80), (5.85, -1.28), (6.65, -1.28), (6.65, -0.80), (6.75, -0.80),
+                    (6.75, -1.40), (5.75, -1.40)]
+            prof = [(side * a, b) for a, b in prof]
+            if side < 0:
+                prof = prof[::-1]
+            objs.append(sweep(f"SideDrain{int(side)}", prof, c0, c1, 2.0, coll=coll, mat=drain, closed=True))
+            off = A.track_offset() if side > 0 else -A.track_offset()
+            inner = abs(off) + 1.50
+            cp = [(side * inner, -0.84), (side * 5.75, -0.82), (side * 5.75, -0.95), (side * inner, -0.97)]
+            if side < 0:
+                cp = cp[::-1]
+            objs.append(sweep(f"Cess{int(side)}", cp, c0, c1, 2.0, coll=coll, mat=cess, closed=True, uv_scale=1.0))
+    print(f"[build]   cutting: lattice {log_n} faces, drains + cess", flush=True)
     return objs

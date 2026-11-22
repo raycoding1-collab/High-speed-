@@ -170,11 +170,82 @@ def interior_or_roof(sh, n, rng, pool):
         mod = 1 + 0.15 * np.sin(2 * np.pi * 0.31 * t) + 0.08 * np.sin(2 * np.pi * 1.7 * t + 1)
         # rail joints are welded; slab-track gives a fine-grained rumble modulated at the fastener pitch (111/0.61 Hz)
         x = (0.020 * rum / np.std(rum) + 0.012 * aero / np.std(aero) * mod + 0.0025 * hiss / np.std(hiss)) * 1.0
+        x = x + traction_hum(n, rng) * 0.0042 + mast_pulses(sh, n, rng, 0.006, 300.0, 1800.0)
         return x
-    # roof camera: violent wind on the microphone + pantograph hiss nearby
+    # roof camera: violent wind on the microphone + pantograph hiss nearby + a whoosh at every passing mast
     w = wind_noise(n, rng, 1.0) * 0.05
     ph = signal.sosfilt(signal.butter(2, [600, 6000], "band", fs=FS, output="sos"), rng.standard_normal(n))
-    return w + 0.010 * ph / np.std(ph)
+    return w + 0.010 * ph / np.std(ph) + mast_pulses(sh, n, rng, 0.03, 80.0, 2500.0)
+
+
+def traction_hum(n, rng):
+    """Electric drive heard in the cab at 400 km/h, at a low level under the rumble:
+    traction-transformer magnetostriction at 2 x 50 Hz and harmonics, and the motor/inverter: wheel 38.4 rev/s x
+    gear ratio 2.79 -> rotor 107 rev/s, 4-pole -> 214 Hz electrical, single-pulse inverter harmonics 6k x f
+    (1284, 2568 Hz).  Each line wanders slightly (speed and load fluctuation), amplitude breathes."""
+    t = np.arange(n) / FS
+    out = np.zeros(n)
+    wander = signal.sosfilt(signal.butter(1, 0.5, "low", fs=FS, output="sos"), rng.standard_normal(n))
+    wander = wander / (np.std(wander) + 1e-12) * 0.0025
+    for f, a in ((100.0, 1.0), (200.0, 0.45), (300.0, 0.2), (214.0, 0.6), (1284.0, 0.22), (2568.0, 0.10)):
+        motor = f not in (100.0, 200.0, 300.0)
+        ph = 2 * np.pi * np.cumsum(f * (1 + (wander if motor else 0.0002 * wander))) / FS
+        am = 0.75 + 0.25 * np.sin(2 * np.pi * rng.uniform(0.07, 0.3) * t + rng.uniform(0, 6))
+        out += a * am * np.sin(ph + rng.uniform(0, 6))
+    return out / (np.std(out) + 1e-12)
+
+
+def mast_pulses(sh, n, rng, amp, lo, hi):
+    """Short pressure whooshes each time the train-mounted microphone passes an OCS mast (every 48 m:
+    111.1 / 48 = 2.31 per second), filtered broadband noise with a fast attack and ~60 ms decay."""
+    t = np.arange(n) / FS
+    period = S.MAST_SPACING_VIADUCT / S.SPEED
+    phase0 = rng.uniform(0, period)
+    k = np.floor((t - phase0) / period)
+    x = t - phase0 - k * period
+    env = np.where(x >= 0, (1 - np.exp(-x / 0.008)) * np.exp(-x / 0.06), 0.0)
+    nz = signal.sosfilt(signal.butter(2, [lo, hi], "band", fs=FS, output="sos"), rng.standard_normal(n))
+    return amp * env * nz / (np.std(nz) + 1e-12)
+
+
+def near_track_layers(sh, n, rng, peak_rms):
+    """For microphones close to the line (S7 in the cess, S9 above the portal):
+    - singing rails: the approaching wheels excite bending waves that run ahead along the rails and radiate
+      near the microphone; on slab track with soft pads they decay ~0.1 dB per metre above 1 kHz, so the metallic hiss (pinned-pinned
+      resonance ~1 kHz at 0.61 m fastener pitch, plus harmonics and broadband 1-5 kHz) rises out of the
+      silence ~2 s before the nose arrives and is masked once the train is there;
+    - the pressure pulses of nose and tail (quasi-static +/- swing lasting ~nose length / V = 0.14 s) that
+      hit the microphone as a deep thump (only the 20-60 Hz tail of the pulse survives the mic's high-pass)."""
+    t = np.arange(n) / FS
+    off = A.track_offset()
+    p0 = np.asarray(sh.cam_fn(0.0), float)
+    s_mic, lat = A.nearest_s(np.array([p0[0]]), np.array([p0[1]]))
+    s_mic = float(s_mic[0]); dist = math.hypot(float(lat[0]) - off, p0[2] - A.RAIL_Z)
+    if dist > 25.0:
+        return np.zeros(n)
+    near = 3.0 / max(dist, 3.0)                                  # line-source spreading from the rail to the mic
+    d_nose = s_mic - (sh.s0 + S.SPEED * t)                       # metres of rail between the nose and the mic
+    lvl = np.where(d_nose > 0, 10 ** (-0.10 * d_nose / 20), 1.0)
+    lvl = np.where(d_nose < -S.TRAIN_LENGTH, np.exp((d_nose + S.TRAIN_LENGTH) / 15.0), lvl)     # ring-down
+    wn = rng.standard_normal(n)
+    sing = np.zeros(n)
+    for fc, q, a in ((960.0, 9.0, 1.0), (1930.0, 10.0, 0.6), (3150.0, 12.0, 0.35)):
+        b, a_ = signal.iirpeak(fc, q, fs=FS)
+        y = signal.lfilter(b, a_, wn); sing += a * y / (np.std(y) + 1e-12)
+    bb = signal.sosfilt(signal.butter(2, [1000, 5000], "band", fs=FS, output="sos"), wn)
+    sing += 0.5 * bb / (np.std(bb) + 1e-12)
+    sing = sing / (np.std(sing) + 1e-12) * lvl * 10 ** (-10 / 20) * near
+    # pressure pulses: derivative-of-Gaussian at the nose, opposite sign at the tail
+    t_n = (s_mic - sh.s0) / S.SPEED + dist / C_AIR
+    t_t = t_n + S.TRAIN_LENGTH / S.SPEED
+    def pulse(tc, sigma=0.045):
+        u = (t - tc) / sigma
+        return -u * np.exp(-0.5 * u * u)
+    pr = pulse(t_n) - 0.6 * pulse(t_t)
+    pr = signal.sosfilt(signal.butter(2, 18, "high", fs=FS, output="sos"), pr)
+    pr = signal.sosfilt(signal.butter(2, 90, "low", fs=FS, output="sos"), pr)
+    pr = pr / (np.max(np.abs(pr)) + 1e-12) * 10 ** (-2 / 20) * near
+    return (sing + pr) * peak_rms
 
 
 def wind_noise(n, rng, strength=1.0):
@@ -256,6 +327,8 @@ def render(out_path, seed=5):
         n = int(round(sh.dur * FS))
         tr = render_shot(sh, pool, rng, layout)
         tr = tr * 10 ** ((SHOT_PEAK_DB[sh.name[:2]] - _peak_rms_db(tr)) / 20)
+        if not sh.attach:
+            tr = tr + near_track_layers(sh, n, rng, 10 ** (SHOT_PEAK_DB[sh.name[:2]] / 20))
         amb = ambience(n, rng, "valley" if sh.name[:2] in ("S1", "S2", "S3", "S4") else "hill")
         amb = amb * 10 ** ((AMB_DB - _rms_db(amb)) / 20)
         if not sh.attach:

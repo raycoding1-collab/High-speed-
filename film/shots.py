@@ -29,9 +29,11 @@ def _ground_at(x, y):
 
 
 class Shot:
-    def __init__(self, name, dur, s0, lens, desc, cam_fn, aim_fn=None, attach=None, fstop=None, focus=None, shake=0.0):
+    def __init__(self, name, dur, s0, lens, desc, cam_fn, aim_fn=None, attach=None, fstop=None, focus=None, shake=0.0,
+                 jolt=False):
         self.name, self.dur, self.s0, self.lens, self.desc = name, dur, s0, lens, desc
         self.cam_fn, self.aim_fn, self.attach, self.fstop, self.focus, self.shake = cam_fn, aim_fn, attach, fstop, focus, shake
+        self.jolt = jolt          # pressure-wave kick of a trackside camera at the nose and tail passes
 
     def s_head(self, t):
         return self.s0 + V * t
@@ -42,11 +44,33 @@ def _smooth_follow(target_fn, t, lag=0.35):
     return 0.6 * target_fn(max(t - lag, 0)) + 0.4 * target_fn(t)
 
 
+def pressure_jolt(sh, t, s_cam):
+    """Trackside camera hit by the train's pressure waves (radians / metres).
+
+    The nose pulse (a sharp +/- pressure swing lasting ~nose length / V = 0.14 s) kicks the small camera stand,
+    which rings at ~7.5 Hz with ~0.22 s decay; the tail pulse comes 211 m / V = 1.9 s later with opposite sign
+    and ~60 % strength; behind the tail the turbulent wake buffets the stand for ~1-2 s."""
+    t_n = (s_cam - sh.s0) / V
+    t_t = t_n + S.TRAIN_LENGTH / V
+    def ring(x):
+        return 0.0 if x < 0 else math.exp(-x / 0.22) * math.sin(2 * math.pi * 7.5 * x)
+    k = ring(t - t_n) - 0.6 * ring(t - t_t)
+    w = 0.0
+    if t > t_t:
+        x = t - t_t
+        w = math.exp(-x / 0.9) * (math.sin(2 * math.pi * 3.1 * x + 0.7) + 0.6 * math.sin(2 * math.pi * 5.3 * x + 2.1)
+                                  + 0.4 * math.sin(2 * math.pi * 8.9 * x + 4.0)) / 2.0
+    yaw = math.radians(0.8) * k + math.radians(0.15) * w
+    pitch = math.radians(0.5) * ring(t - t_n - 0.03) - math.radians(0.3) * ring(t - t_t - 0.03) + math.radians(0.1) * w
+    lateral = 0.010 * k + 0.003 * w
+    return yaw, pitch, lateral
+
+
 def build_shots():
     shots = []
     # S1 establishing aerial: drone 700 m south of the viaduct, drifting east at 6 m/s
     c1 = _rail(1500, -720, 70)
-    shots.append(Shot("S1_aerial", 7.0, 1040.0, 40,
+    shots.append(Shot("S1_aerial", 8.0, 1040.0, 40,
                       "Drone 700 m south, 100 m up, drifting east at 6 m/s; train crosses the valley on the viaduct",
                       lambda t, c=c1: c + np.array([6.0 * t, 0, -0.6 * t]),
                       lambda t, sh=None: _rail(1560 + 9 * t, 40, 20), fstop=8))
@@ -61,7 +85,7 @@ def build_shots():
                       lambda t: _rail(1650 + 26 * t, -24, 12),
                       None, fstop=4.0))
     # S4 helicopter chase at 70 m/s (AS350 cruise), 180 m off, 60 m above the deck, 135 mm on a gimbal
-    shots.append(Shot("S4_heli", 8.0, 2080.0, 135,
+    shots.append(Shot("S4_heli", 9.0, 2080.0, 135,
                       "Helicopter at 70 m/s (252 km/h) paralleling the curve; the 400 km/h train slowly pulls away",
                       lambda t: _rail(2080 - 120 + 70 * t, -185, 62),
                       None, fstop=5.6, shake=0.08))
@@ -78,16 +102,16 @@ def build_shots():
     shots.append(Shot("S7_cutting_low", 6.0, 4150 - V * 2.7 + 0.0, 20,
                       "Remote low camera in the cess ditch, 3.0 m from the nearest rail, 2.0 m from the car body; pass-by then wake",
                       lambda t, c=c7: c,
-                      lambda t: _rail(4150 - 60, A.track_offset(), 1.6), fstop=2.8))
+                      lambda t: _rail(4150 - 60, A.track_offset(), 1.6), fstop=2.8, jolt=True))
     # S8 long lens head-on from the hill above the cutting
     c8 = _rail(3905, 72.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 7.0      # north rim of the cutting (on a camera tower), sun behind the lens
-    shots.append(Shot("S8_tele", 7.0, 2650.0, 600,
+    shots.append(Shot("S8_tele", 9.0, 2650.0, 600,
                       "600 mm from the north rim of the cutting, 0.5-1.3 km away; compressed head-on approach out of the curve",
                       lambda t, c=c8: c, lambda t, sh=None: _rail(2650 + V * t - 40, A.track_offset(), 2.2), fstop=8))
     # S9 tunnel portal
     c9 = _rail(A.TUNNEL_S + 9.0, 4.0, 0); c9[2] = _ground_at(c9[0], c9[1]) + 1.7   # on the hill right above the portal
-    shots.append(Shot("S9_portal", 12.0, 4450 - V * 2.6, 24,
-                      "On the hill above the portal looking down the cutting: the train races at the lens and dives into the mountain beneath it; dust and leaves settle",
+    shots.append(Shot("S9_portal", 6.5, 4450 - V * 2.6, 24,
+                      "On the hill above the portal looking down the cutting: the train races at the lens and dives into the mountain beneath it; cut 2 s after the tail is in",
                       lambda t, c=c9: c, lambda t: _rail(4330, A.track_offset(), 1.0), fstop=8))
     return shots
 

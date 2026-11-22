@@ -62,6 +62,7 @@ def main():
     ap.add_argument("--overlay", default=None); ap.add_argument("--fps", type=int, default=24)
     ap.add_argument("--report", default=None); ap.add_argument("--maxrate", default="10M")
     ap.add_argument("--yt4k", default=None, help="extra 3840x2160 (lanczos upscale) high-bitrate copy for YouTube")
+    ap.add_argument("--grain", type=float, default=0.0, help="fine temporal luma grain (ffmpeg noise c0s), 0 = off")
     a = ap.parse_args()
     missing = [f for f in range(a.first, a.last + 1) if not png_complete(os.path.join(a.frames, f"frame_{f:05d}.png"))]
     if missing:
@@ -75,6 +76,8 @@ def main():
         tmp = tempfile.mkdtemp()
         src = overlay_frames(a.frames, tmp, a.first, a.last, a.overlay)
     vf = "scale=trunc(iw/2)*2:trunc(ih/2)*2:out_color_matrix=bt709:out_range=tv,format=yuv420p"
+    grain = f",noise=c0s={a.grain:g}:c0f=t" if a.grain > 0 else ""      # binds the CG edges like film / sensor grain
+    vf += grain
     common_in = ["-framerate", str(a.fps), "-start_number", str(a.first), "-i", os.path.join(src, "frame_%05d.png"), "-i", a.audio]
     tags = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", "-color_range", "tv"]
     run(["ffmpeg", "-y", *common_in, "-vf", vf, "-c:v", "libx264", "-preset", "slow", "-crf", "16",
@@ -96,6 +99,8 @@ def main():
     if a.yt4k:
         # YouTube streams 2160p uploads with a higher-bitrate codec, so even 1080p viewers get a cleaner picture
         vf4k = "scale=3840:2160:flags=lanczos:out_color_matrix=bt709:out_range=tv,format=yuv420p"
+        if a.grain > 0:
+            vf4k += f",noise=c0s={a.grain * 0.8:g}:c0f=t"
         run(["ffmpeg", "-y", *common_in, "-vf", vf4k, "-c:v", "libx264", "-preset", "slow", "-crf", "16",
              "-maxrate", "45M", "-bufsize", "90M", "-profile:v", "high", "-level", "5.1", *tags,
              "-c:a", "aac", "-b:a", "320k", "-ar", "48000", "-frames:v", str(n), "-movflags", "+faststart", a.yt4k])

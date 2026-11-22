@@ -197,6 +197,13 @@ def make_cameras(scene, shots, res):
                     ex, ez = e.x, e.z
                     if sh.shake:
                         ex += rng.normal(0, sh.shake) * 0.002; ez += rng.normal(0, sh.shake) * 0.002
+                    if sh.jolt:
+                        if f == f0 and sub == 0.0:
+                            s_cam = float(A.nearest_s(np.array([pos[0]]), np.array([pos[1]]))[0][0])
+                        dyaw, dpitch, dlat = SH.pressure_jolt(sh, t, s_cam)
+                        ex += dpitch; ez += dyaw
+                        th = A.heading(s_cam)
+                        pos = np.asarray(pos, float) + dlat * np.array([-math.sin(th), math.cos(th), 0.0])
                     fr.append(f + sub); locs.append(tuple(pos)); rots.append((ex, e.y, ez))
             fr = np.array(fr, np.float32); locs = np.array(locs); rots = np.array(rots)
             for k in range(3):
@@ -267,6 +274,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     far, strip = W.build_terrain(cw, mats)
     towers = W.build_towers(cw, mats)
     W.build_river(cw)
+    W.build_roads(cw, tex, W.hamlet_sites())
 
     log("infrastructure")
     ci = bl.collection("Railway")
@@ -277,12 +285,13 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     ocs = infra.build_ocs(ci, A.S_MIN + 30, A.TUNNEL_S + 270)
     build_tunnel(ci, tex)
     infra.build_furniture(ci, lambda x, y: float(W.natural_ground(np.array([x]), np.array([y]))[0]))
+    infra.build_cutting_details(ci, tex)
     infra.build_signs(ci, texdir)
-    W.build_village(cw)
+    W.build_village(cw, assets)
     hr = np.random.default_rng(31)
     for i, (hs, hl, hx, hy) in enumerate(W.hamlet_sites()):
-        W.build_village(cw, n=int(hr.integers(6, 15)), centre_s=hs, lat=hl, seed=40 + i, spread_s=75.0,
-                        spread_l=(-60.0, 60.0), name=f"Hamlet{i}")
+        W.build_village(cw, assets, n=int(hr.integers(6, 15)), centre_s=hs, lat=hl, seed=40 + i, spread_s=75.0,
+                        spread_l=(-60.0, 60.0), name=f"Hamlet{i}", hamlet=True)
 
     log("train")
     ct = bl.collection("Train")
@@ -382,8 +391,9 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     shrubs = [models[k] for k in ("shrub1", "shrub2", "shrub4", "fern") if k in models]
     grasses = [models[k] for k in ("grass1", "grass2", "grass3", "weed") if k in models]
     # crowns (mid-field)
-    crowns = [W.crown_proxy(f"Crown{i}", src, i) for i in range(4)]
-    for c in crowns:
+    crowns = [W.crown_proxy(f"Crown{i}", src, i) for i in range(8)]
+    bamboo = [W.bamboo_proxy(f"Bamboo{i}", src, 100 + i) for i in range(4)]
+    for c in crowns + bamboo:
         c.hide_render = True
     # towers: crowns on ledges / gentle slopes
     def tower_filter(p, n):
@@ -407,13 +417,25 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     W.scatter_tree("VegHillTrees", coll, pts, trees, (0.7, 1.25), 2, wind=0.03)
     pts = W.sample_surface([strip], 0.30 * scale, rng, slope_near(3750, 4600, 8.5), max_n=90000)
     W.scatter_tree("VegHillShrubs", coll, pts, shrubs, (0.7, 1.5), 3, wind=0.06)
-    pts = W.sample_surface([strip], 8.0 * scale, rng, slope_near(3900, 4520, 6.6, clear=False), max_n=320000)
+    def cut_grass(p, n):
+        k = slope_near(3900, 4520, 6.6, clear=False)(p, n)
+        s_, lat_ = A.nearest_s(p[:, 0], p[:, 1])
+        return k & ~infra.on_lattice(s_, np.abs(lat_)) & ~((np.abs(lat_) > 5.6) & (np.abs(lat_) < 6.9))   # not on beams / in drains
+    pts = W.sample_surface([strip], 8.0 * scale, rng, cut_grass, max_n=320000)
     log("  cutting grass", len(pts))
     W.scatter_tree("VegCuttingGrass", coll, pts, grasses, (0.8, 1.6), 4, wind=0.10)
     # valley floor: dense green tree clumps (copses, river lines, hamlet groves) and a few lone trees, like real
     # southern-Chinese farmland. (Evenly scattered single Poly Haven "island" trees read as savanna, so not used here.)
     vp = W.valley_tree_points(rng, W.hamlet_sites(), scale)
     vp = vp[_sightline_mask(vp, 9.0)]
+    from . import village as V
+    if V.SITES:                                     # no tree grows through a house (houses are <= 14 m across)
+        hs = np.array([(q[0], q[1]) for q in V.SITES])
+        near = np.zeros(len(vp), bool)
+        for hx, hy in hs:
+            near |= np.hypot(vp[:, 0] - hx, vp[:, 1] - hy) < 12.0
+        log("  valley trees removed at houses", int(near.sum()))
+        vp = vp[~near]
     # crown proxies are mid-distance trees: keep them >= 300 m from ground-level cameras (S2 tripod in the paddies),
     # where their simplified shape would be seen up close
     for sh in SH.build_shots():
@@ -422,8 +444,29 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         c = np.asarray(sh.cam_fn(0.0), float)
         if c[2] - W.natural_ground(np.array([c[0]]), np.array([c[1]]))[0] < 6.0:
             vp = vp[np.hypot(vp[:, 0] - c[0], vp[:, 1] - c[1]) > 300.0]
-    log("  valley trees (crown clumps)", len(vp))
-    W.scatter_tree("VegValleyCopses", coll, vp, crowns, (2.2, 5.5), 6, wind=0.0)
+    # bamboo along the river and in the groves round the hamlets, broadleaf copses elsewhere
+    river_d = np.abs(vp[:, 0] - W.RIVER_X(vp[:, 1] + 500.0))
+    near_h = np.zeros(len(vp), bool)
+    for (hs_, hl_, hx_, hy_) in W.hamlet_sites():
+        near_h |= np.hypot(vp[:, 0] - hx_, vp[:, 1] - hy_) < 90.0
+    is_bamboo = (river_d < 45.0) | (near_h & (rng.random(len(vp)) < 0.45))
+    log("  valley trees (crown clumps)", int((~is_bamboo).sum()), "bamboo clumps", int(is_bamboo.sum()))
+    W.scatter_tree("VegValleyCopses", coll, vp[~is_bamboo], crowns, (2.2, 5.5), 6, wind=0.0)
+    W.scatter_tree("VegValleyBamboo", coll, vp[is_bamboo], bamboo, (3.2, 4.6), 7, wind=0.0)
+    # the hill massif around the cutting: forest its broad flanks (seen from the cab and the long lens) where
+    # the real-tree corridor strip ends; keep 150 m from the low cameras that look at it close up
+    def massif(p, n):
+        s_, lat_ = A.nearest_s(p[:, 0], p[:, 1])
+        k = (n[:, 2] > 0.45) & (np.abs(lat_) > 28.0) & (W.natural_ground(p[:, 0], p[:, 1]) > 7.0)
+        for sh in SH.build_shots():
+            if sh.name[:2] in ("S7", "S9") and sh.cam_fn is not None:
+                c = np.asarray(sh.cam_fn(0.0), float)
+                k &= np.hypot(p[:, 0] - c[0], p[:, 1] - c[1]) > 150.0
+        return k & _sightline_mask(p, 6.0)
+    pts = W.sample_surface([far], 0.018 * scale, rng, massif, max_n=120000,
+                           tri_filter=lambda c: W.natural_ground(c[:, 0], c[:, 1]) > 7.0)
+    log("  massif crowns", len(pts))
+    W.scatter_tree("VegMassif", coll, pts, crowns, (2.6, 5.8), 8, wind=0.0)
     # grass + weeds right around the S2 camera (paddy edge)
     c2 = [s for s in SH.build_shots() if s.name.startswith("S2")][0].cam_fn(0)
     def near_c2(p, n):
