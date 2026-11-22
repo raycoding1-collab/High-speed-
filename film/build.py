@@ -509,6 +509,18 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     def near_c2(p, n):
         return np.hypot(p[:, 0] - c2[0], p[:, 1] - c2[1]) < 60
     W.scatter_rice(coll, src, c2, 42.0 if scale >= 1 else 25.0, PADDY_PATH[0])
+    # S2 foreground (v3): three real trees standing on the field bunds just inside the frame edges, 28-41 m from
+    # the tripod, so the low shot has depth in front of the viaduct (they rise above the rice, below the deck)
+    sh2 = [s_ for s_ in SH.build_shots() if s_.name.startswith("S2")][0]
+    a2 = np.asarray(sh2.aim_fn(0.0), float)
+    bearing = math.atan2(a2[1] - c2[1], a2[0] - c2[0])
+    fp = []
+    for ang, dist in ((-31.0, 28.0), (-25.0, 41.0), (32.0, 31.0)):
+        a = bearing + math.radians(ang)
+        x, y = c2[0] + dist * math.cos(a), c2[1] + dist * math.sin(a)
+        fp.append((x, y, float(W.natural_ground(np.array([x]), np.array([y]))[0])))
+    if trees:
+        W.scatter_tree("VegS2Frame", coll, np.array(fp), trees, (0.95, 1.15), 12, wind=0.03)
 
 
 def main():
