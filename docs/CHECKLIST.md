@@ -2,7 +2,7 @@
 
 Status: **Verified** = done and checked by the method in the last column · **Built** = implemented, not yet
 verified in a render · **Partial** = works but below the quality bar · **Open** = not done yet.
-Snapshot: 2026-11-22 ~03:30 UTC (UTC+1 local 04:30).
+Snapshot: 2026-11-22 ~04:00 UTC (UTC+1 local 05:00). Final render run 44982706751 in progress.
 
 ## 0. Engine decision
 | # | Requirement | Status | How it is verified |
@@ -51,9 +51,9 @@ Snapshot: 2026-11-22 ~03:30 UTC (UTC+1 local 04:30).
 | 3.3 | Wheels at the correct rate | Verified | 38.44 rev/s = 576.6°/frame keyed from distance / radius; extra motion steps so blur follows the rotation |
 | 3.4 | Real 180° shutter motion blur | Verified | Shutter 0.5 frame, keys at whole and half frames, train moves 2.31 m per exposure |
 | 3.5 | Subtle body sway and suspension motion | Verified | ±6 mm lateral, ±4 mm bounce, ±0.12° roll per car, separate phases |
-| 3.6 | Pantograph presses on the wire and lifts it | Built | 120 mm uplift wave keyed to the pantograph chainage (geometry nodes); needs render check |
-| 3.7 | Wake whips grass, leaves and dust | Built | Grass tilt from head/tail chainage; ~5 000 leaf/dust particles simulated (slipstream, wake decay, drag, gravity); needs render check |
-| 3.8 | Shots like a real crew (pass-bys, drone that can't keep up, chase, low angles, cab view, real lenses and focus) | Partial | 9 shots: drone 26 m/s, helicopter 70 m/s, pass-bys, cab, roof cam, 600 mm; focus pulls just added; S5/S6/S8/S9 framing being fixed |
+| 3.6 | Pantograph presses on the wire and lifts it | Verified | 120 mm uplift wave keyed to the pantograph chainage; pan head modelled at wire + 120 mm; seen in S6 preview frames |
+| 3.7 | Wake whips grass, leaves and dust | Verified | Grass tilt from head/tail chainage; simulated leaves + growing dust puffs (slipstream, wake decay, drag, gravity); S7 frames 1075/1090 checked |
+| 3.8 | Shots like a real crew (pass-bys, drone that can't keep up, chase, low angles, cab view, real lenses and focus) | Verified | 9 shots checked in the motion preview; S2 moved to the near-track side after the preview showed the deck hid the train; focus pulls on the train in S3/S4/S8 |
 | 3.9 | Check every shot against real speeds | Verified | `film/physics.py` per-frame log (speed, wheel rate, camera speed, distance); burned into the preview |
 
 ## 4. Sound
@@ -64,16 +64,16 @@ Snapshot: 2026-11-22 ~03:30 UTC (UTC+1 local 04:30).
 | 4.3 | Pantograph hiss, wind on mic, quiet natural ambience | Verified | Separate sources/beds, per-shot levels |
 | 4.4 | No steady artificial tones, nothing harsh or painful | Verified | Noise-based only; spectrum 4–8 kHz −11 dB, 8–16 kHz −23 dB vs mids; slow compressor |
 | 4.5 | Master to EBU R128 | Verified | Measured −23.00 LUFS integrated, true peak −5.44 dBTP (pyloudnorm, 4× oversampled peak) |
-| 4.6 | Sound checked against picture | Open | Needs the motion preview |
+| 4.6 | Sound checked against picture | Verified | Preview MP4 measured −23.0 LUFS (ffmpeg ebur128), LRA 14.7 LU; per-shot loudness contour matches the action |
 
 ## 5. Checkpoints (final film only after approval)
 | # | Checkpoint | Status | Notes |
 |---|---|---|---|
 | a | Train stills beside real reference photos | Built | Matched side view + front 3/4 rendered; to be re-rendered at full quality and sent |
 | b | Environment stills | Partial | Drafts rendered; quality fixes in progress |
-| c | Low-res motion preview of every shot with physics numbers | Open | Pipeline + overlay done; first cloud attempt failed (GPU compositor), fixed |
-| d | Render-time estimate | Partial | Measured on GitHub runners: ~9 min/frame @1080p/48 spp with the old volumetric scene; re-timing after removing volumes |
-| e | Final film | Open | Will not start before your approval |
+| c | Low-res motion preview of every shot with physics numbers | Verified | Run 44975008213 → output/cr450_preview.mp4: 1560 frames, 65.0 s, audio, BT.709 (ffprobe) |
+| d | Render-time estimate | Verified | Run 44975074671: 3.5–8.5 min/frame (mean 5.7) @1080p/48 spp → 40 jobs × ~3.7 h, ~7.5–8 h wall (docs/CHECKPOINTS.md) |
+| e | Final film | Running | Started after the user's go-ahead ("finish it fully"): run 44982706751, 40 jobs |
 
 ## 6. Rendering on GitHub Actions
 | # | Requirement | Status | How it is verified |
@@ -82,12 +82,12 @@ Snapshot: 2026-11-22 ~03:30 UTC (UTC+1 local 04:30).
 | 6.2 | Build scene once, pass .blend as artifact | Verified | Run 44966818946: build job → 445 MB packed artifact → 6 render jobs |
 | 6.3 | Pin exact Blender/bpy and Python | Verified | Python 3.13.18 (seen in runner logs), bpy 5.3.0, numpy 2.5.5, scipy 1.18.1, pillow 13.0.0, soundfile 0.14.0, pyloudnorm 0.2.0 |
 | 6.4 | Interleaved frames (k, k+20, …) | Verified | `render_frames.py` slicing `frames[job::jobs]` |
-| 6.5 | Time 1–2 representative frames in the cloud, report per-job and total time | Partial | 6 frames timed; final numbers after re-timing |
-| 6.6 | Quality preset so each job ends well under 6 h; more jobs in batches if needed | Open | Set from the new timing |
+| 6.5 | Time 1–2 representative frames in the cloud, report per-job and total time | Verified | 9 frames (one per shot) timed on runners; see checkpoint d |
+| 6.6 | Quality preset so each job ends well under 6 h; more jobs in batches if needed | Verified | 1080p/48 spp, 40 jobs in two batches of 20 → ~3.7 h per job |
 | 6.7 | Ask before the full run | Open | Will ask |
 | 6.8 | Resumable: skip existing frames, re-run only failed jobs | Built | PNG IEND + decode check, per-attempt artifacts re-downloaded, 335 min clean stop; not yet exercised on a real re-run |
-| 6.9 | Final job refuses missing/incomplete frames; H.264, even dims, BT.709, audio; ffprobe frame count/duration/audio; upload artifact; commit MP4 | Built | `tools/encode.py`; to be exercised by the preview run |
-| 6.10 | Instagram copy just under 25 MB (two-pass) | Built | Bitrate from duration, target 24.6 MB, hard check < 25 MB |
+| 6.9 | Final job refuses missing/incomplete frames; H.264, even dims, BT.709, audio; ffprobe frame count/duration/audio; upload artifact; commit MP4 | Verified | Exercised end-to-end by the preview run (commit 8951af0) |
+| 6.10 | Instagram copy just under 25 MB (two-pass) | Verified | Preview IG copy 24 174 345 bytes (two-pass) |
 | 6.11 | Report run link, measured time per frame, final file details | Open | At the end |
 
 ## Quality bar: verification gates before each checkpoint is sent
