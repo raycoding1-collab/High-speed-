@@ -47,15 +47,18 @@ def _noise2(x, y, scale, seed):
 
 
 def _tower_r(i, ang, zf, R):
-    """Radius of tower i at azimuth ang and relative height zf (0 base .. 1 top)."""
-    return R * (1 + 0.20 * np.sin(3 * ang + i + 2.0 * zf) + 0.12 * np.sin(5 * ang + 2 * i - 3 * zf)
-                + 0.07 * np.sin(9 * ang + 3 * i + 5 * zf) + 0.04 * np.sin(17 * ang + i + 9 * zf))
+    """Radius of tower i at azimuth ang and relative height zf (0 base .. 1 top): irregular lobes that twist with
+    height, buttresses, and vertical solution flutes (fenglin tower karst is jagged, not a smooth dome)."""
+    return R * (1 + 0.22 * np.sin(3 * ang + i + 2.0 * zf) + 0.13 * np.sin(5 * ang + 2 * i - 3 * zf)
+                + 0.08 * np.sin(9 * ang + 3 * i + 5 * zf) + 0.05 * np.sin(17 * ang + i + 9 * zf)
+                + 0.035 * np.sin(29 * ang + 2 * i + 4 * zf) + 0.02 * np.sin(47 * ang + i)
+                + 0.06 * np.sin(7 * ang + 5 * i + 11 * zf) * zf)
 
 
 def tower_profile(i, d):
     """Height fraction vs normalised radius: sugar-loaf (steep flanks, rounded crown), varied per tower."""
-    k = 1.8 + 0.8 * ((i * 37) % 7) / 6.0
-    return np.clip(1 - d ** k, 0, 1) ** (0.55 + 0.25 * ((i * 13) % 5) / 4.0)
+    k = 3.0 + 1.6 * ((i * 37) % 7) / 6.0                  # steep, near-vertical lower walls
+    return np.clip(1 - d ** k, 0, 1) ** (0.42 + 0.22 * ((i * 13) % 5) / 4.0)
 
 
 def tower_height(x, y):
@@ -185,16 +188,16 @@ def build_towers(coll, mats):
     """Each tower: polar-grid sugar-loaf with height-varying lobes, ledges and overhang-free noise."""
     objs = []
     for i, (tx, ty, H, R) in enumerate(TOWERS):
-        nr, na = 40, 128
-        r = np.linspace(0, 1.3, nr) ** 0.9
+        nr, na = 72, 256
+        r = np.linspace(0, 1.3, nr) ** 0.8
         a = np.linspace(0, 2 * np.pi, na, endpoint=False)
         RR, AA = np.meshgrid(r, a, indexing="ij")
         prof = tower_profile(i, RR)
         zf = prof
         rr = _tower_r(i, AA, zf, R)
         X = tx + RR * rr * np.cos(AA); Y = ty + RR * rr * np.sin(AA)
-        ledges = 0.025 * H * np.sin(RR * 31 + AA * 3 + i) * (RR < 1) * (prof > 0.15)
-        bumps = 0.05 * H * _noise2(X, Y, 45, 100 + i) * (RR < 1.05)
+        ledges = 0.03 * H * np.sin(RR * 31 + AA * 3 + i) * (RR < 1) * (prof > 0.15)
+        bumps = (0.06 * H * _noise2(X, Y, 45, 100 + i) + 0.025 * H * _noise2(X, Y, 14, 200 + i)) * (RR < 1.05)
         g = natural_ground(X, Y)
         Z = H * prof + ledges + bumps * prof + g - 3.0
         Z = np.maximum(Z, g - 3.0)
@@ -273,8 +276,9 @@ def terrain_material(tex, paddy_img):
     pz2 = nt.nodes.new("ShaderNodeMath"); pz2.operation = "MULTIPLY"; L(pz.outputs[0], pz2.inputs[0]); L(pimg.outputs["Alpha"], pz2.inputs[1])
     # rice colour: young green to yellow-green by field variation
     rice = nt.nodes.new("ShaderNodeValToRGB")
-    rice.color_ramp.elements[0].color = (0.055, 0.15, 0.018, 1); rice.color_ramp.elements[1].color = (0.10, 0.22, 0.025, 1)
-    rice.color_ramp.elements.new(0.55).color = (0.075, 0.19, 0.02, 1)
+    rice.color_ramp.elements[0].color = (0.045, 0.13, 0.016, 1); rice.color_ramp.elements[1].color = (0.15, 0.25, 0.04, 1)
+    rice.color_ramp.elements.new(0.35).color = (0.07, 0.18, 0.02, 1)
+    rice.color_ramp.elements.new(0.70).color = (0.10, 0.21, 0.03, 1)
     L(field_var, rice.inputs[0])
     ripe = nt.nodes.new("ShaderNodeMix"); ripe.data_type = "RGBA"; ripe.inputs["B"].default_value = (0.14, 0.19, 0.035, 1)
     L(is_ripe, ripe.inputs["Factor"]); L(rice.outputs[0], ripe.inputs["A"])
@@ -282,8 +286,19 @@ def terrain_material(tex, paddy_img):
     L(is_fallow, fallow.inputs["Factor"]); L(ripe.outputs["Result"], fallow.inputs["A"]); L(mud.outputs["Color"], fallow.inputs["B"])
     riceN = nt.nodes.new("ShaderNodeTexNoise"); riceN.inputs["Scale"].default_value = 3.0; riceN.inputs["Detail"].default_value = 2
     L(geo.outputs["Position"], riceN.inputs["Vector"])
-    ricem = nt.nodes.new("ShaderNodeMix"); ricem.data_type = "RGBA"; ricem.blend_type = "MULTIPLY"; ricem.inputs["Factor"].default_value = 0.6
-    L(fallow.outputs["Result"], ricem.inputs["A"]); L(riceN.outputs["Color"], ricem.inputs["B"])
+    ricem0 = nt.nodes.new("ShaderNodeMix"); ricem0.data_type = "RGBA"; ricem0.blend_type = "MULTIPLY"; ricem0.inputs["Factor"].default_value = 0.6
+    L(fallow.outputs["Result"], ricem0.inputs["A"]); L(riceN.outputs["Color"], ricem0.inputs["B"])
+    # uneven growth inside each field (10-50 m patches): darker/lighter, a touch yellower where thinner
+    mott = nt.nodes.new("ShaderNodeTexNoise"); mott.inputs["Scale"].default_value = 0.045; mott.inputs["Detail"].default_value = 4
+    mott.inputs["Roughness"].default_value = 0.6
+    L(geo.outputs["Position"], mott.inputs["Vector"])
+    mr = nt.nodes.new("ShaderNodeMapRange"); mr.inputs[1].default_value = 0.3; mr.inputs[2].default_value = 0.7
+    mr.inputs[3].default_value = 0.72; mr.inputs[4].default_value = 1.25; L(mott.outputs["Fac"], mr.inputs[0])
+    ricem = nt.nodes.new("ShaderNodeMix"); ricem.data_type = "RGBA"; ricem.blend_type = "MULTIPLY"; ricem.inputs["Factor"].default_value = 1.0
+    L(ricem0.outputs["Result"], ricem.inputs["A"])
+    mcol = nt.nodes.new("ShaderNodeCombineColor"); L(mr.outputs[0], mcol.inputs[0]); L(mr.outputs[0], mcol.inputs[1])
+    mb = nt.nodes.new("ShaderNodeMath"); mb.operation = "POWER"; mb.inputs[1].default_value = 1.6; L(mr.outputs[0], mb.inputs[0])
+    L(mb.outputs[0], mcol.inputs[2]); L(mcol.outputs[0], ricem.inputs["B"])
     # hillside: grass <-> forest floor (dark canopy from afar), rock on steep
     hill = nt.nodes.new("ShaderNodeMix"); hill.data_type = "RGBA"
     big = nt.nodes.new("ShaderNodeTexNoise"); big.inputs["Scale"].default_value = 0.01; big.inputs["Detail"].default_value = 2
@@ -297,7 +312,7 @@ def terrain_material(tex, paddy_img):
     # paddy: rice vs water vs dikes
     pad = nt.nodes.new("ShaderNodeMix"); pad.data_type = "RGBA"
     dk = nt.nodes.new("ShaderNodeMath"); dk.operation = "POWER"; dk.inputs[1].default_value = 0.6; L(dike, dk.inputs[0])
-    pad.inputs["B"].default_value = (0.11, 0.12, 0.05, 1)
+    pad.inputs["B"].default_value = (0.13, 0.17, 0.06, 1)
     L(dk.outputs[0], pad.inputs["Factor"]); L(ricem.outputs["Result"], pad.inputs["A"])
     allc = nt.nodes.new("ShaderNodeMix"); allc.data_type = "RGBA"
     L(pz2.outputs[0], allc.inputs["Factor"]); L(rk.outputs["Result"], allc.inputs["A"]); L(pad.outputs["Result"], allc.inputs["B"])
@@ -308,21 +323,33 @@ def terrain_material(tex, paddy_img):
         a = nt.nodes.new("ShaderNodeMath"); a.operation = "MULTIPLY_ADD"; a.inputs[1].default_value = sign
         L(usep.outputs["Y"], a.inputs[0]); L(usep.outputs["X"], a.inputs[2])
         b = nt.nodes.new("ShaderNodeMath"); b.operation = "PINGPONG"; b.inputs[1].default_value = 2.5; L(a.outputs[0], b.inputs[0])
-        c = nt.nodes.new("ShaderNodeMath"); c.operation = "LESS_THAN"; c.inputs[1].default_value = 0.12; L(b.outputs[0], c.inputs[0])
+        c = nt.nodes.new("ShaderNodeMath"); c.operation = "LESS_THAN"; c.inputs[1].default_value = 0.25; L(b.outputs[0], c.inputs[0])
         return c.outputs[0]
     lat1, lat2 = diag(1.0), diag(-1.0)
     latt = nt.nodes.new("ShaderNodeMath"); latt.operation = "MAXIMUM"; L(lat1, latt.inputs[0]); L(lat2, latt.inputs[1])
     cm = nt.nodes.new("ShaderNodeAttribute"); cm.attribute_name = "cutmask"
     lm = nt.nodes.new("ShaderNodeMath"); lm.operation = "MULTIPLY"; L(latt.outputs[0], lm.inputs[0]); L(cm.outputs["Fac"], lm.inputs[1])
     cz = nt.nodes.new("ShaderNodeAttribute"); cz.attribute_name = "cutzone"
+    hydro = nt.nodes.new("ShaderNodeMix"); hydro.data_type = "RGBA"; hydro.blend_type = "MULTIPLY"; hydro.inputs["Factor"].default_value = 1.0
+    hydro.inputs["B"].default_value = (0.55, 0.85, 0.24, 1)                   # hydroseeded slope grass: lush and bright
+    L(gbw.outputs[0], hydro.inputs["A"])
     cutgrass = nt.nodes.new("ShaderNodeMix"); cutgrass.data_type = "RGBA"; L(cz.outputs["Fac"], cutgrass.inputs["Factor"])
-    L(allc.outputs["Result"], cutgrass.inputs["A"]); L(grass.outputs["Result"], cutgrass.inputs["B"])
-    frame_col = nt.nodes.new("ShaderNodeMix"); frame_col.data_type = "RGBA"; frame_col.inputs["B"].default_value = (0.17, 0.168, 0.16, 1)
+    L(allc.outputs["Result"], cutgrass.inputs["A"]); L(hydro.outputs["Result"], cutgrass.inputs["B"])
+    fcon = nt.nodes.new("ShaderNodeMix"); fcon.data_type = "RGBA"; fcon.blend_type = "MULTIPLY"; fcon.inputs["Factor"].default_value = 1.0
+    fcon.inputs["B"].default_value = (0.62, 0.61, 0.58, 1)                  # weathered precast concrete beams
+    L(rock.outputs["Color"], fcon.inputs["A"])
+    frame_col = nt.nodes.new("ShaderNodeMix"); frame_col.data_type = "RGBA"; L(fcon.outputs["Result"], frame_col.inputs["B"])
     L(lm.outputs[0], frame_col.inputs["Factor"]); L(cutgrass.outputs["Result"], frame_col.inputs["A"])
     p = nt.nodes.new("ShaderNodeBsdfPrincipled")
     L(frame_col.outputs["Result"], p.inputs["Base Color"]); p.inputs["Roughness"].default_value = 0.85
     nm = nt.nodes.new("ShaderNodeNormalMap"); nm.inputs["Strength"].default_value = 0.6
-    L(nor.outputs["Color"], nm.inputs["Color"]); L(nm.outputs[0], p.inputs["Normal"])
+    L(nor.outputs["Color"], nm.inputs["Color"])
+    # raised bunds between paddies + raised concrete lattice beams on the cut slopes (bump on top of the grass normal)
+    bh = nt.nodes.new("ShaderNodeMath"); bh.operation = "MULTIPLY"; L(dk.outputs[0], bh.inputs[0]); L(pz2.outputs[0], bh.inputs[1])
+    bh2 = nt.nodes.new("ShaderNodeMath"); bh2.operation = "MULTIPLY_ADD"; bh2.inputs[1].default_value = 1.0
+    L(bh.outputs[0], bh2.inputs[0]); L(lm.outputs[0], bh2.inputs[2])
+    bbump = nt.nodes.new("ShaderNodeBump"); bbump.inputs["Strength"].default_value = 0.8; bbump.inputs["Distance"].default_value = 0.35
+    L(bh2.outputs[0], bbump.inputs["Height"]); L(nm.outputs[0], bbump.inputs["Normal"]); L(bbump.outputs[0], p.inputs["Normal"])
     # water in flooded paddies: mirror-like with slight ripples, muddy tint
     wat = nt.nodes.new("ShaderNodeBsdfPrincipled")
     wat.inputs["Base Color"].default_value = (0.04, 0.05, 0.025, 1); wat.inputs["Roughness"].default_value = 0.30
@@ -336,7 +363,9 @@ def terrain_material(tex, paddy_img):
     nd = nt.nodes.new("ShaderNodeMath"); nd.operation = "SUBTRACT"; nd.inputs[0].default_value = 1.0; L(dike, nd.inputs[1])
     wm2 = nt.nodes.new("ShaderNodeMath"); wm2.operation = "MULTIPLY"; L(water, wm2.inputs[0]); L(nd.outputs[0], wm2.inputs[1])
     L(wm2.outputs[0], wmask.inputs[0]); L(pz2.outputs[0], wmask.inputs[1])
-    mix = nt.nodes.new("ShaderNodeMixShader"); L(wmask.outputs[0], mix.inputs[0]); L(p.outputs[0], mix.inputs[1]); L(wat.outputs[0], mix.inputs[2])
+    wfac = nt.nodes.new("ShaderNodeMath"); wfac.operation = "MULTIPLY"; wfac.inputs[1].default_value = 0.55
+    L(wmask.outputs[0], wfac.inputs[0])
+    mix = nt.nodes.new("ShaderNodeMixShader"); L(wfac.outputs[0], mix.inputs[0]); L(p.outputs[0], mix.inputs[1]); L(wat.outputs[0], mix.inputs[2])
     L(mix.outputs[0], out.inputs[0])
     return m
 
@@ -629,8 +658,10 @@ def crown_proxy(name, coll, seed=0):
     return ob
 
 
-def sample_surface(obj_list, density, rng, filt=None, max_n=200000):
-    """Random points on the evaluated surfaces of objects (area weighted), optional filter f(p, n)."""
+def sample_surface(obj_list, density, rng, filt=None, max_n=200000, tri_filter=None):
+    """Random points on the evaluated surfaces of objects (area weighted), optional filter f(p, n).
+    tri_filter(centroids) restricts the triangles BEFORE sampling, so max_n is spent inside the region
+    (filtering afterwards wasted ~98 % of the points when the region is small compared with the mesh)."""
     pts_all = []
     for ob in obj_list:
         me = ob.data
@@ -641,6 +672,12 @@ def sample_surface(obj_list, density, rng, filt=None, max_n=200000):
         co = co @ M[:3, :3].T + M[:3, 3]
         a, b, c = co[tri[:, 0]], co[tri[:, 1]], co[tri[:, 2]]
         nrm = np.cross(b - a, c - a); area = 0.5 * np.linalg.norm(nrm, axis=1); nrm /= (2 * area[:, None] + 1e-9)
+        if tri_filter is not None:
+            sel = tri_filter((a + b + c) / 3.0)
+            a, b, c, nrm, area = a[sel], b[sel], c[sel], nrm[sel], area[sel]
+            tri = tri[sel]
+            if len(area) == 0:
+                continue
         n = min(max_n, int(area.sum() * density))
         if n <= 0:
             continue
@@ -721,7 +758,7 @@ def build_haze(coll, layers=((-12, 24, 0.00062), (24, 900, 0.000085)),
     return objs
 
 
-def build_village(coll, n=26, centre_s=2700.0, lat=-300.0, seed=4):
+def build_village(coll, n=26, centre_s=2700.0, lat=-300.0, seed=4, spread_s=260.0, spread_l=(-120.0, 90.0), name="Village"):
     """Rural Guangxi village: 2-3 storey concrete houses, white tile / grey render, dark tile or flat roofs."""
     from .trainparts import box, setmat, join
     rng = np.random.default_rng(seed)
@@ -750,7 +787,7 @@ def build_village(coll, n=26, centre_s=2700.0, lat=-300.0, seed=4):
     parts = []
     cs = centre_s
     for i in range(n):
-        s = cs + rng.uniform(-260, 260); l = lat + rng.uniform(-120, 90)
+        s = cs + rng.uniform(-spread_s, spread_s); l = lat + rng.uniform(*spread_l)
         th = A.heading(s); x0, y0 = A.xy(s)
         x = x0 - math.sin(th) * l; y = y0 + math.cos(th) * l
         g = float(natural_ground(np.array([x]), np.array([y]))[0])
@@ -771,8 +808,77 @@ def build_village(coll, n=26, centre_s=2700.0, lat=-300.0, seed=4):
             r.rotation_euler = b.rotation_euler.copy(); parts.append(r)
             st = setmat(box("stair", (3.0, 3.0, 2.8), (x, y, g + h + 1.4), coll, 0.0), wall_m)
             st.rotation_euler = b.rotation_euler.copy(); parts.append(st)
-    ob = join(parts, "Village"); coll.objects.link(ob)
+    ob = join(parts, name); coll.objects.link(ob)
     return ob
+
+
+def _clear_of_features(x, y, margin=40.0):
+    """True where (x, y) is on the open valley floor: away from karst towers, the river and the hills."""
+    x = np.asarray(x, float); y = np.asarray(y, float)
+    ok = np.ones(x.shape, bool)
+    for i, (tx, ty, H, R) in enumerate(TOWERS):
+        ok &= np.hypot(x - tx, y - ty) > 1.25 * R + margin
+    ok &= np.abs(x - RIVER_X(y + 500)) > 30.0
+    ok &= natural_ground(x, y) < 6.0
+    return ok
+
+
+def hamlet_sites(n=10, seed=21):
+    """Small farm hamlets spread over the valley floor (rail coordinates s, lat), clear of towers/river/line."""
+    rng = np.random.default_rng(seed)
+    out = []
+    tries = 0
+    while len(out) < n and tries < 5000:
+        tries += 1
+        s = rng.uniform(250, 3300); lat = rng.choice([-1, 1]) * rng.uniform(260, 1300)
+        th = A.heading(s); x0, y0 = A.xy(s)
+        x = x0 - math.sin(th) * lat; y = y0 + math.cos(th) * lat
+        if not _clear_of_features(np.array([x]), np.array([y]), 70.0)[0]:
+            continue
+        if abs(s - 2700) < 420 and -480 < lat < -120:          # the existing village
+            continue
+        if any(math.hypot(x - q[2], y - q[3]) < 420 for q in out):
+            continue
+        out.append((s, lat, x, y))
+    return out
+
+
+def valley_tree_points(rng, hamlets, scale=1.0):
+    """Tree clumps on the valley floor like real Guangxi farmland: copses, tree lines along the river,
+    groves around hamlets and lone trees on field corners. Returns (N, 3) points."""
+    pts = []
+    def add(x, y):
+        pts.append(np.column_stack([x, y]))
+    # copses scattered over the paddies
+    nc = int(320 * scale)
+    cx = rng.uniform(-1400, 4400, nc * 3); cy = rng.uniform(-1700, 2300, nc * 3)
+    k = _clear_of_features(cx, cy, 25.0); cx, cy = cx[k][:nc], cy[k][:nc]
+    for x0, y0 in zip(cx, cy):
+        m = int(rng.integers(4, 26)); r = rng.uniform(7, 26)
+        add(x0 + rng.normal(0, r, m), y0 + rng.normal(0, r * rng.uniform(0.4, 1.0), m))
+    # river banks
+    t = np.arange(-1500, 2500, 5.5)
+    xr = RIVER_X(t); yr = t - 500
+    for sgn in (-1, 1):
+        off = 22 + rng.uniform(0, 9, len(t))
+        keep = rng.random(len(t)) < 0.6
+        add((xr + sgn * off)[keep], yr[keep])
+    # groves around hamlets (and the main village)
+    th = float(A.heading(2700.0)); vx, vy = (float(v) for v in A.xy(2700.0))
+    main_village = (2700.0, -300.0, vx + math.sin(th) * 300.0, vy - math.cos(th) * 300.0)
+    for (s, lat, x, y) in list(hamlets) + [main_village]:
+        m = int(rng.integers(30, 70))
+        add(x + rng.normal(0, 55, m), y + rng.normal(0, 55, m))
+    # lone trees on field corners
+    nl = int(1800 * scale)
+    add(rng.uniform(-1400, 4400, nl), rng.uniform(-1700, 2300, nl))
+    P = np.concatenate(pts)
+    keep = _clear_of_features(P[:, 0], P[:, 1], 6.0)
+    s, lat = A.nearest_s(P[:, 0], P[:, 1])
+    keep &= np.abs(lat) > 22.0                                   # nothing growing on/next to the viaduct
+    P = P[keep]
+    Z = ground(P[:, 0], P[:, 1])
+    return np.column_stack([P, Z])
 
 
 def rice_clump(name, coll, seed=0):

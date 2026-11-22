@@ -140,6 +140,21 @@ def _fcurves(action):
         return out
 
 
+# exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
+SHOT_EXPOSURE = {"S7": 1.0, "S9": 1.2}
+
+
+def key_shot_exposure(scene, shots):
+    for sh, f0, f1 in SH.timeline(shots):
+        scene.view_settings.exposure = SHOT_EXPOSURE.get(sh.name[:2], 0.0)
+        scene.view_settings.keyframe_insert("exposure", frame=f0)
+    if scene.animation_data and scene.animation_data.action:
+        for fc in _fcurves(scene.animation_data.action):
+            if fc.data_path == "view_settings.exposure":
+                for kp in fc.keyframe_points:
+                    kp.interpolation = "CONSTANT"
+
+
 FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car1", "S9": 60.0}
 
 
@@ -264,6 +279,10 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     infra.build_furniture(ci, lambda x, y: float(W.natural_ground(np.array([x]), np.array([y]))[0]))
     infra.build_signs(ci, texdir)
     W.build_village(cw)
+    hr = np.random.default_rng(31)
+    for i, (hs, hl, hx, hy) in enumerate(W.hamlet_sites()):
+        W.build_village(cw, n=int(hr.integers(6, 15)), centre_s=hs, lat=hl, seed=40 + i, spread_s=75.0,
+                        spread_l=(-60.0, 60.0), name=f"Hamlet{i}")
 
     log("train")
     ct = bl.collection("Train")
@@ -282,6 +301,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     animate(sc, res, ocs, shots)
     key_grass_wake(shots)
     make_cameras(sc, shots, res)
+    key_shot_exposure(sc, shots)
     for ob in res["wheelsets"]:
         try:
             ob.cycles.motion_steps = 6
@@ -367,10 +387,12 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         c.hide_render = True
     # towers: crowns on ledges / gentle slopes
     def tower_filter(p, n):
-        return (n[:, 2] > 0.35) & (rng.random(len(p)) < 0.85)
-    pts = W.sample_surface(towers, 0.004 * scale, rng, tower_filter, max_n=40000)
+        # dense subtropical scrub forest everywhere it can cling; bare limestone only on the steepest faces
+        keep_p = np.clip((n[:, 2] - 0.18) / 0.35, 0, 1) * 0.95
+        return rng.random(len(p)) < keep_p
+    pts = W.sample_surface(towers, 0.03 * scale, rng, tower_filter, max_n=900000)
     log("  tower crowns", len(pts))
-    W.scatter_tree("VegTowers", coll, pts, crowns, (2.5, 5.0), 1, wind=0.0)
+    W.scatter_tree("VegTowers", coll, pts, crowns, (2.8, 6.5), 1, wind=0.0)
     # hill massif & corridor slopes near the cutting / portal: real trees + shrubs + grass
     strip = bpy.data.objects["TerrainCorridor"]
     far = bpy.data.objects["TerrainFar"]
@@ -391,11 +413,25 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     # valley: tree lines and shrubs along field edges near the viaduct (S1/S2/S3)
     def valley(p, n):
         s, lat = A.nearest_s(p[:, 0], p[:, 1])
-        return (p[:, 2] < 6) & (np.abs(lat) > 14) & (np.abs(lat) < 400) & (s > 600) & (s < 2600)
-    pts = W.sample_surface([strip, far], 0.0045 * scale, rng, valley, max_n=60000)
+        return ((p[:, 2] < 6) & (np.abs(lat) > 14) & (np.abs(lat) < 400) & (s > 600) & (s < 2600)
+                & W._clear_of_features(p[:, 0], p[:, 1], 4.0) & _sightline_mask(p, 9.0))
+    def near_zone(c):
+        # restrict the triangles to the near-viaduct box first (the point budget used to be spent on the whole 114 km2)
+        s, lat = A.nearest_s(c[:, 0], c[:, 1])
+        return (np.abs(lat) < 420) & (s > 560) & (s < 2640)
+    pts = W.sample_surface([far], 0.0012 * scale, rng, valley, max_n=60000, tri_filter=near_zone)
+    log("  valley trees (near)", len(pts))
     W.scatter_tree("VegValleyTrees", coll, pts, trees, (0.8, 1.4), 5, wind=0.03)
-    pts = W.sample_surface([strip, far], 0.006 * scale, rng, valley, max_n=80000)
+    pts = W.sample_surface([far], 0.0016 * scale, rng, valley, max_n=80000, tri_filter=near_zone)
+    log("  valley shrubs (near)", len(pts))
     W.scatter_tree("VegValleyShrubs", coll, pts, shrubs, (1.2, 2.2), 7, wind=0.05)
+    # copses, river lines, hamlet groves and lone trees over the whole valley floor (crown proxies)
+    vp = W.valley_tree_points(rng, W.hamlet_sites(), scale)
+    s_v, l_v = A.nearest_s(vp[:, 0], vp[:, 1])
+    far_only = ~((np.abs(l_v) < 420) & (s_v > 560) & (s_v < 2640)) & _sightline_mask(vp, 8.0)
+    vp = vp[far_only]
+    log("  valley copses (crowns)", len(vp))
+    W.scatter_tree("VegValleyCopses", coll, vp, crowns, (2.2, 5.5), 6, wind=0.0)
     # grass + weeds right around the S2 camera (paddy edge)
     c2 = [s for s in SH.build_shots() if s.name.startswith("S2")][0].cam_fn(0)
     def near_c2(p, n):
