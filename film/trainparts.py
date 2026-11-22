@@ -232,30 +232,76 @@ def build_pantograph(name, coll, head_h=1.00):
 
 
 def pose_pantograph(name, coll, rig, head_h, parent):
-    """(Re)create the moving arm assembly for a given head height (m above mount)."""
+    """Single-arm pantograph posed for a head height above the mount (m).
+
+    Lower arm: tapered A-frame from the base hinge to the knee; upper arm: slim tube from the knee back to the
+    head; balance (guide) rod; pneumatic damper; sprung pan head 1950 mm wide with two carbon strips and horns.
+    """
     for o in list(coll.objects):
         if o.name.startswith(name + "_arm"):
             bpy.data.objects.remove(o, do_unlink=True)
-    kx, kz = panto_knee(head_h - 0.22)
+    hx, hz = 0.0, head_h - 0.30
+    base = (-0.85, 0.47)
+    kx, kz = panto_knee(hz, base=base, l1=1.62, l2=1.74)
     parts = []
-    base = (-0.75, 0.47)
-    for y in (-0.22, 0.22):
-        parts.append(setmat(tube_between(f"{name}_l", (base[0], y * 1.4, base[1]), (kx, y * 0.5, kz), 0.045, coll), rig["alu"]))
-    parts.append(setmat(tube_between(f"{name}_u", (kx, 0, kz), (0.0, 0, head_h - 0.22), 0.035, coll), rig["alu"]))
-    parts.append(setmat(tube_between(f"{name}_pr", (base[0] + 0.15, 0, base[1] - 0.05), (kx - 0.05, 0, kz - 0.08), 0.015, coll), rig["dark"]))
-    # pan head: frame, two carbon strips across the track (y), horns
-    for x in (-0.18, 0.18):
-        strip = box(f"{name}_cs", (0.06, 1.25, 0.035), (x, 0, head_h - 0.018), coll); setmat(strip, rig["carbon"]); parts.append(strip)
-        for side in (1, -1):
-            h = tube_between(f"{name}_hn", (x, side * 0.62, head_h - 0.02), (x, side * 0.95, head_h - 0.18), 0.018, coll)
-            setmat(h, rig["alu"]); parts.append(h)
-    parts.append(setmat(box(f"{name}_hf", (0.42, 0.10, 0.06), (0, 0, head_h - 0.12), coll), rig["alu"]))
+    # lower arm A-frame: two tubes from the hinge ends converging at the knee, with two cross braces
+    for y in (-0.34, 0.34):
+        parts.append(setmat(tube_between(f"{name}_l", (base[0], y, base[1]), (kx, y * 0.18, kz), 0.042, coll, 10), rig["alu"]))
+    for f in (0.35, 0.7):
+        ax = base[0] + (kx - base[0]) * f; az = base[1] + (kz - base[1]) * f
+        w = 0.34 * (1 - f) + 0.06 * f
+        parts.append(setmat(tube_between(f"{name}_lb", (ax, -w, az), (ax, w, az), 0.018, coll, 6), rig["alu"]))
+    # knee joint
+    parts.append(setmat(cylinder(f"{name}_kn", 0.05, 0.16, "y", (kx, 0, kz), coll, 12), rig["alu"]))
+    # upper arm: single slim tube knee -> head frame, plus guide rod below it
+    parts.append(setmat(tube_between(f"{name}_u", (kx, 0, kz), (hx, 0, hz), 0.032, coll, 10), rig["alu"]))
+    parts.append(setmat(tube_between(f"{name}_gr", (base[0] + 0.22, 0, base[1] + 0.02), (kx - 0.10, 0, kz - 0.12), 0.013, coll, 6), rig["dark"]))
+    # damper (pneumatic cylinder) on the base pushing the lower arm
+    parts.append(setmat(tube_between(f"{name}_dmp", (base[0] + 0.55, 0.20, base[1]), (base[0] + (kx - base[0]) * 0.25, 0.12, base[1] + (kz - base[1]) * 0.25), 0.035, coll, 8), rig["dark"]))
+    # pan head: frame, springs, two carbon strips across the track, horns
+    parts.append(setmat(box(f"{name}_hf", (0.46, 0.08, 0.05), (hx, 0, hz + 0.04), coll), rig["alu"]))
     for side in (1, -1):
-        parts.append(setmat(box(f"{name}_hs", (0.40, 0.05, 0.10), (0, side * 0.45, head_h - 0.10), coll), rig["alu"]))
+        parts.append(setmat(tube_between(f"{name}_hs", (hx - 0.18, side * 0.42, hz + 0.05), (hx + 0.18, side * 0.42, hz + 0.05), 0.02, coll, 6), rig["alu"]))
+        for x in (-0.18, 0.18):
+            parts.append(setmat(tube_between(f"{name}_sp", (x, side * 0.42, hz + 0.05), (x, side * 0.42, head_h - 0.04), 0.018, coll, 6), rig["dark"]))
+    for x in (-0.18, 0.18):
+        parts.append(setmat(box(f"{name}_cs", (0.055, 1.30, 0.032), (x, 0, head_h - 0.016), coll), rig["carbon"]))
+        parts.append(setmat(box(f"{name}_csb", (0.07, 1.36, 0.018), (x, 0, head_h - 0.042), coll), rig["alu"]))
+        for side in (1, -1):
+            pts = [(x, side * 0.68, head_h - 0.03), (x, side * 0.82, head_h - 0.06), (x, side * 0.95, head_h - 0.16), (x, side * 0.97, head_h - 0.26)]
+            for a, b in zip(pts[:-1], pts[1:]):
+                parts.append(setmat(tube_between(f"{name}_hn", a, b, 0.016, coll, 6), rig["alu"]))
     arm = join(parts, name + "_arm")
     coll.objects.link(arm)
     arm.parent = parent
     return arm
+
+
+def build_roof_equipment(name, coll, car_length, panto=True):
+    """Pantograph-well side shrouds and the roof HV cable on post insulators (car-local, roof at 3.86 m)."""
+    shroud = M.principled("RoofShroud", (0.56, 0.57, 0.59), 0.85, 0.35, coat=0.4)
+    ins = M.principled("Insulator", (0.20, 0.06, 0.05), 0.0, 0.25, coat=0.6)
+    cable = M.principled("HVCable", (0.03, 0.03, 0.03), 0.0, 0.45)
+    parts = []
+    if panto:
+        for side in (1, -1):
+            pts = [(-2.4, 0.0), (-1.6, 0.30), (1.6, 0.30), (2.4, 0.0)]
+            for (x0, h0), (x1, h1) in zip(pts[:-1], pts[1:]):
+                b = box(f"{name}_sh", (x1 - x0, 0.05, max(h0, h1)), ((x0 + x1) / 2, side * 0.78, 3.80 + max(h0, h1) / 2), coll)
+                setmat(b, shroud); parts.append(b)
+        # HV cable from the pantograph to the car end (roof bus), on post insulators every 3 m
+        for x in np.arange(-1.6, -car_length / 2 + 1.0, -3.0):
+            prof = [(0.0, 0.0), (0.045, 0.0)]
+            for k in range(4):
+                z0 = 0.03 + k * 0.04
+                prof += [(0.045, z0), (0.07, z0 + 0.01), (0.045, z0 + 0.025)]
+            prof += [(0.045, 0.2), (0.0, 0.2)]
+            i = revolve(f"{name}_pi", prof, "z", 12, coll); i.location = (x, 0.35, 3.84); setmat(i, ins); parts.append(i)
+        parts.append(setmat(tube_between(f"{name}_cab", (-0.6, 0.35, 4.06), (-car_length / 2 + 1.0, 0.35, 4.06), 0.028, coll, 8), cable))
+    if not parts:
+        return None
+    ob = join(parts, name); coll.objects.link(ob)
+    return ob
 
 
 # ------------------------------------------------------------------ gangway, deflector, wiper
@@ -376,7 +422,22 @@ def build_cab(name, coll, X_origin):
     dark = M.principled("CabDash", (0.03, 0.03, 0.035), 0.0, 0.6)
     seat = M.principled("CabSeat", (0.05, 0.05, 0.06), 0.0, 0.7)
     screen = M.principled("CabScreen", (0.02, 0.05, 0.08), 0.0, 0.2, emission=(0.2, 0.5, 0.9), estrength=0.6)
-    parts = [setmat(box(name + "_dash", (0.9, 2.3, 0.30), (X_origin - 5.55, 0, 2.02), coll, 0.05), dark),
+    # driver's console: sloping desk from the windscreen base back to the driver, instruments on top
+    desk_v = []
+    for X, z in ((4.10, 2.24), (4.60, 2.34), (5.15, 2.46), (5.55, 2.52)):
+        for y in (-1.15, 1.15):
+            desk_v.append((X_origin - X, y, z)); desk_v.append((X_origin - X, y, 1.60))
+    desk_f = []
+    for k in range(3):
+        a = 4 * k; b = 4 * (k + 1)
+        desk_f += [(a, a + 2, b + 2, b), (a + 1, b + 1, b + 3, a + 3), (a, b, b + 1, a + 1), (a + 2, a + 3, b + 3, b + 2)]
+    desk = new_mesh_object(name + "_desk", np.array(desk_v), desk_f, coll, smooth=False)
+    desk.data.materials.append(dark)
+    parts = [desk,
+             setmat(box(name + "_scr1", (0.22, 0.34, 0.015), (X_origin - 5.05, 0.30, 2.455), coll), screen),
+             setmat(box(name + "_scr2", (0.22, 0.34, 0.015), (X_origin - 5.05, -0.30, 2.455), coll), screen),
+             setmat(box(name + "_scr3", (0.18, 0.26, 0.015), (X_origin - 5.05, 0.0, 2.455), coll), screen),
+             setmat(box(name + "_ctl", (0.20, 0.26, 0.08), (X_origin - 5.45, -0.55, 2.55), coll, 0.02), seat),
              setmat(box(name + "_scr1", (0.20, 0.30, 0.02), (X_origin - 5.75, 0.28, 2.18), coll), screen),
              setmat(box(name + "_scr2", (0.20, 0.30, 0.02), (X_origin - 5.75, -0.28, 2.18), coll), screen),
              setmat(box(name + "_seat", (0.55, 0.55, 0.9), (X_origin - 6.3, 0.0, 1.85), coll, 0.05), seat),

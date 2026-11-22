@@ -116,7 +116,7 @@ def interp_curve(pts, X):
 R1 = [(0.95, 1.47), (1.6, 1.62), (2.0, 1.76), (3.0, 2.08), (4.0, 2.38), (5.0, 2.66), (6.0, 2.90), (7.0, 3.08),
       (8.0, 3.22), (9.0, 3.34), (10.0, 3.45), (11.0, 3.56), (11.8, 3.70)]          # upper red line (canopy edge)
 LB = [(1.6, 1.58), (2.0, 1.66), (2.6, 1.80), (4.0, 2.05), (5.5, 2.27), (7.0, 2.42)]  # lower edge of black side wedge
-WS_LOW = [(2.05, 1.98), (3.0, 2.30), (4.0, 2.62), (5.0, 2.94), (5.35, 3.05)]      # windscreen lower edge
+WS_LOW = [(1.95, 1.90), (3.0, 2.16), (4.0, 2.44), (5.0, 2.72), (5.45, 2.86)]      # windscreen lower edge
 BAND_TOP_FRONT = [(7.0, 2.42), (8.0, 2.62), (9.0, 2.86), (9.6, 2.97), (10.2, 3.00)]
 CANOPY_END_X = 9.4
 
@@ -155,10 +155,10 @@ def draw_end_car(side):
     A.paint([(xb + 0.60, 1.75), (xb + 1.15, 3.0), (L, 3.0), (L, 1.75)], ORANGE)
     A.paint([(xb + 0.60, 1.75), (xb + 0.86, 2.33), (L, 2.33), (L, 1.75)], (228, 64, 34))
     # --- windscreen (glass) and headlight lens
-    ws = [(2.05, 1.98)] + WS_LOW[1:] + [(5.35, 3.05), (5.30, top), (2.6, top), (2.1, 2.3)]
+    ws = [(1.95, 1.90)] + WS_LOW[1:] + [(5.45, 2.86), (5.45, top), (2.5, top), (2.0, 2.2)]
     A.poly(ws, col=(10, 12, 14), met=MET_PAINT, rgh=R_GLASS, gls=128)
     A.outline(ws, 0.010)
-    eye = [(2.95, 1.93), (5.45, 2.33), (5.42, 2.47), (3.15, 2.07)]
+    eye = [(2.95, 1.86), (5.45, 2.24), (5.42, 2.36), (3.15, 1.98)]
     A.poly(eye, col=(25, 25, 28), met=MET_PAINT, rgh=R_GLASS, gls=64)
     A.outline(eye, 0.008)
     # cab side window (in black area ahead of cab door)

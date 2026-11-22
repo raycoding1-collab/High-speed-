@@ -140,7 +140,7 @@ def _fcurves(action):
         return out
 
 
-FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 5.5, "S7": 4.2, "S8": "Car1", "S9": 48.0}
+FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car1", "S9": 60.0}
 
 
 def make_cameras(scene, shots, res):
@@ -159,9 +159,9 @@ def make_cameras(scene, shots, res):
             ob.parent = parent
             ob.location = sh.attach[1]
             if sh.name.startswith("S5"):
-                ob.rotation_euler = (math.radians(84.5), 0, math.radians(-90))     # look forward (+x), slightly down
+                ob.rotation_euler = (math.radians(86.5), 0, math.radians(-90))     # look forward (+x), slightly down
             else:
-                ob.rotation_euler = (math.radians(80.0), 0, math.radians(90))      # look back (-x) at the pantograph
+                ob.rotation_euler = (math.radians(79.0), 0, math.radians(97))      # look back (-x) and across at the pantograph
             fr = np.arange(f0, f1 + 2, dtype=np.float32)
             j = rng.normal(0, sh.shake, (len(fr), 3))
             for k in range(3):
@@ -226,13 +226,18 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     sc.render.use_motion_blur = True
     sc.render.motion_blur_shutter = 0.5           # 180-degree shutter
     sc.render.motion_blur_position = "START"
-    sc.view_settings.view_transform = "AgX"; sc.view_settings.look = "AgX - Base Contrast" if False else "None"
+    sc.view_settings.view_transform = "AgX"
+    try:
+        sc.view_settings.look = "AgX - Medium High Contrast"
+    except TypeError:
+        pass
     texdir = texdir or os.path.join(os.path.dirname(out), "textures")
     os.makedirs(texdir, exist_ok=True)
     tex = tex_paths(assets)
 
     log("sky + haze")
-    sun, sun_dir = W.build_sky(sc, os.path.join(assets, "hdri", "kloppenheim_06_puresky_8k.hdr"))
+    # golden-hour MORNING: sun low in the ENE -> valley radiation fog, backlit mist in the eastbound shots
+    sun, sun_dir = W.build_sky(sc, os.path.join(assets, "hdri", "kloppenheim_06_puresky_8k.hdr"), sun_azimuth_deg=72.0)
     cw = bl.collection("World")
     from . import post
     post.setup(sc, haze_on=False)                         # bloom + grade only; atmosphere is analytic fog in the shaders
@@ -371,7 +376,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     def slope_near(lo, hi, lat_min):
         def f(p, n):
             s, lat = A.nearest_s(p[:, 0], p[:, 1])
-            return (s > lo) & (s < hi) & (np.abs(lat) > lat_min) & (n[:, 2] > 0.5) & _sightline_mask(p, 6.0)
+            return (s > lo) & (s < hi) & (np.abs(lat) > lat_min) & (n[:, 2] > 0.42) & _sightline_mask(p, 6.0)
         return f
     pts = W.sample_surface([strip], 0.035 * scale, rng, slope_near(3700, 4700, 30), max_n=40000)
     log("  hill trees", len(pts))
@@ -385,8 +390,10 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     def valley(p, n):
         s, lat = A.nearest_s(p[:, 0], p[:, 1])
         return (p[:, 2] < 6) & (np.abs(lat) > 14) & (np.abs(lat) < 400) & (s > 600) & (s < 2600)
-    pts = W.sample_surface([strip, far], 0.0015 * scale, rng, valley, max_n=20000)
-    W.scatter_tree("VegValleyTrees", coll, pts, trees, (0.8, 1.3), 5, wind=0.03)
+    pts = W.sample_surface([strip, far], 0.0045 * scale, rng, valley, max_n=60000)
+    W.scatter_tree("VegValleyTrees", coll, pts, trees, (0.8, 1.4), 5, wind=0.03)
+    pts = W.sample_surface([strip, far], 0.006 * scale, rng, valley, max_n=80000)
+    W.scatter_tree("VegValleyShrubs", coll, pts, shrubs, (1.2, 2.2), 7, wind=0.05)
     # grass + weeds right around the S2 camera (paddy edge)
     c2 = [s for s in SH.build_shots() if s.name.startswith("S2")][0].cam_fn(0)
     def near_c2(p, n):

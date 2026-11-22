@@ -97,10 +97,12 @@ def formation(s, lat, g):
     form_z = A.RAIL_Z - 0.85                 # formation level below rail
     half = 7.0                               # formation half width (double track + cess + ditch)
     out = g.copy()
-    on = (s > A.VIADUCT[1] - 20) & (s < A.TUNNEL_S + 15)
+    on = (s > A.VIADUCT[1] - 20) & (s < A.TUNNEL_S + 80)
     al = np.abs(lat)
     # cutting slope 1:1 (soil) / embankment slope 1:1.5
     ex = np.maximum(al - half, 0)
+    face = np.maximum(s - (A.TUNNEL_S - 14.0), 0.0)          # 1:1 portal face above the tunnel
+    form_z = form_z + face
     tier = np.floor(ex / 10.0)                       # 1:1 slope, 2 m bench every 8 m of height
     cut = form_z + tier * 8.0 + np.minimum(ex - tier * 10.0, 8.0)
     fill = form_z - np.maximum(al - half, 0) / 1.5
@@ -108,7 +110,7 @@ def formation(s, lat, g):
     # ditches at the cutting toe
     ditch = (al > half - 1.2) & (al < half - 0.3) & (g > form_z)
     target = np.where(ditch, target - 0.5, target)
-    w = np.clip((s - (A.VIADUCT[1] - 20)) / 30, 0, 1) * np.clip((A.TUNNEL_S + 15 - s) / 10, 0, 1)
+    w = np.clip((s - (A.VIADUCT[1] - 20)) / 30, 0, 1) * np.clip((A.TUNNEL_S + 80 - s) / 20, 0, 1)
     out = np.where(on, g * (1 - w) + target * w, g)
     return out
 
@@ -156,7 +158,9 @@ def build_terrain(coll, mats):
     faces = []
     for i in range(len(ss) - 1):
         for j in range(n - 1):
-            # leave the tunnel bore open beyond the portal (hill surface stays, ground under track removed)
+            # leave the tunnel bore open: the lining tube (outer radius 7.5 m) closes the hole
+            if A.TUNNEL_S - 14.0 < ss[i] < A.TUNNEL_S - 3.0 and abs(lats[j]) < 7.3 and abs(lats[j + 1]) < 7.3:
+                continue
             a = i * n + j
             faces.append((a, a + n, a + n + 1, a + 1))       # wound so normals point up
     nlat = len(lats)
@@ -171,6 +175,8 @@ def build_terrain(coll, mats):
     cutm = ((nat > V[:, 2] + 0.3) & (np.abs(L2d) > 7.2) & (S2d > A.VIADUCT[1]) & (S2d < A.TUNNEL_S + 5)
             & (V[:, 2] < A.RAIL_Z + 15.0)).astype(np.float32)
     at = strip.data.attributes.new("cutmask", "FLOAT", "POINT"); at.data.foreach_set("value", cutm)
+    cutz = ((nat > V[:, 2] + 0.3) & (np.abs(L2d) > 7.2) & (S2d > A.VIADUCT[1]) & (S2d < A.TUNNEL_S + 30)).astype(np.float32)
+    az = strip.data.attributes.new("cutzone", "FLOAT", "POINT"); az.data.foreach_set("value", cutz)
     strip.data.materials.append(mats["terrain"])
     return far, strip
 
@@ -301,16 +307,17 @@ def terrain_material(tex, paddy_img):
     def diag(sign):
         a = nt.nodes.new("ShaderNodeMath"); a.operation = "MULTIPLY_ADD"; a.inputs[1].default_value = sign
         L(usep.outputs["Y"], a.inputs[0]); L(usep.outputs["X"], a.inputs[2])
-        b = nt.nodes.new("ShaderNodeMath"); b.operation = "PINGPONG"; b.inputs[1].default_value = 2.0; L(a.outputs[0], b.inputs[0])
-        c = nt.nodes.new("ShaderNodeMath"); c.operation = "LESS_THAN"; c.inputs[1].default_value = 0.28; L(b.outputs[0], c.inputs[0])
+        b = nt.nodes.new("ShaderNodeMath"); b.operation = "PINGPONG"; b.inputs[1].default_value = 1.5; L(a.outputs[0], b.inputs[0])
+        c = nt.nodes.new("ShaderNodeMath"); c.operation = "LESS_THAN"; c.inputs[1].default_value = 0.15; L(b.outputs[0], c.inputs[0])
         return c.outputs[0]
     lat1, lat2 = diag(1.0), diag(-1.0)
     latt = nt.nodes.new("ShaderNodeMath"); latt.operation = "MAXIMUM"; L(lat1, latt.inputs[0]); L(lat2, latt.inputs[1])
     cm = nt.nodes.new("ShaderNodeAttribute"); cm.attribute_name = "cutmask"
     lm = nt.nodes.new("ShaderNodeMath"); lm.operation = "MULTIPLY"; L(latt.outputs[0], lm.inputs[0]); L(cm.outputs["Fac"], lm.inputs[1])
-    cutgrass = nt.nodes.new("ShaderNodeMix"); cutgrass.data_type = "RGBA"; L(cm.outputs["Fac"], cutgrass.inputs["Factor"])
+    cz = nt.nodes.new("ShaderNodeAttribute"); cz.attribute_name = "cutzone"
+    cutgrass = nt.nodes.new("ShaderNodeMix"); cutgrass.data_type = "RGBA"; L(cz.outputs["Fac"], cutgrass.inputs["Factor"])
     L(allc.outputs["Result"], cutgrass.inputs["A"]); L(grass.outputs["Result"], cutgrass.inputs["B"])
-    frame_col = nt.nodes.new("ShaderNodeMix"); frame_col.data_type = "RGBA"; frame_col.inputs["B"].default_value = (0.26, 0.255, 0.24, 1)
+    frame_col = nt.nodes.new("ShaderNodeMix"); frame_col.data_type = "RGBA"; frame_col.inputs["B"].default_value = (0.17, 0.168, 0.16, 1)
     L(lm.outputs[0], frame_col.inputs["Factor"]); L(cutgrass.outputs["Result"], frame_col.inputs["A"])
     p = nt.nodes.new("ShaderNodeBsdfPrincipled")
     L(frame_col.outputs["Result"], p.inputs["Base Color"]); p.inputs["Roughness"].default_value = 0.85
@@ -649,11 +656,11 @@ def sample_surface(obj_list, density, rng, filt=None, max_n=200000):
 
 
 # ------------------------------------------------------------------ sky / sun / haze
-def build_sky(scene, hdri_path, sun_azimuth_deg=262.0, exposure=0.0, strength=0.9):
+def build_sky(scene, hdri_path, sun_azimuth_deg=262.0, exposure=0.0, strength=0.70):
     """HDRI sky rotated so its (clipped) sun lies at the requested azimuth, plus a matched warm sun lamp."""
     HDRI_SUN_U, HDRI_SUN_ELEV = 0.612, 4.64
     phi0 = (HDRI_SUN_U - 0.5) * 2 * math.pi
-    d0 = np.array([-math.cos(phi0), math.sin(phi0)])            # horizontal dir of the HDRI sun (blender equirect)
+    d0 = np.array([math.cos(phi0), -math.sin(phi0)])            # Blender equirect: u = -atan2(y, x)/2pi + 0.5
     az0 = math.degrees(math.atan2(d0[0], d0[1])) % 360          # azimuth from north (clockwise)
     rot = math.radians(az0 - sun_azimuth_deg)                   # rotate environment by -(...) via mapping
     w = bpy.data.worlds.new("World")
@@ -678,8 +685,8 @@ def build_sky(scene, hdri_path, sun_azimuth_deg=262.0, exposure=0.0, strength=0.
     el = math.radians(HDRI_SUN_ELEV + 1.0)
     az = math.radians(sun_azimuth_deg)
     sun_dir = np.array([math.sin(az) * math.cos(el), math.cos(az) * math.cos(el), math.sin(el)])
-    ld = bpy.data.lights.new("Sun", "SUN"); ld.energy = 7.0; ld.angle = math.radians(0.55)
-    ld.color = (1.0, 0.63, 0.37)
+    ld = bpy.data.lights.new("Sun", "SUN"); ld.energy = 13.0; ld.angle = math.radians(0.55)
+    ld.color = (1.0, 0.60, 0.33)
     sun = bpy.data.objects.new("Sun", ld); scene.collection.objects.link(sun)
     from mathutils import Vector
     sun.rotation_mode = "QUATERNION"
@@ -751,8 +758,19 @@ def build_village(coll, n=26, centre_s=2700.0, lat=-300.0, seed=4):
         b = setmat(box("house", (w, d, h), (x, y, g + h / 2), coll, 0.0), wall_m)
         b.rotation_euler = (0, 0, th + rng.choice([0, math.pi / 2]) + rng.uniform(-0.1, 0.1))
         parts.append(b)
-        r = setmat(box("roof", (w + 0.4, d + 0.4, 0.35), (x, y, g + h + 0.17), coll), roof_m)
-        r.rotation_euler = b.rotation_euler.copy(); parts.append(r)
+        if rng.random() < 0.65:
+            # gable roof of dark grey tiles (two sloping slabs)
+            for sgn in (1, -1):
+                r = setmat(box("roof", (w + 0.6, d / 2 + 0.5, 0.18), (0, 0, 0), coll), roof_m)
+                import mathutils
+                M = mathutils.Matrix.Translation((x, y, g + h + 1.0)) @ mathutils.Matrix.Rotation(b.rotation_euler.z, 4, "Z") \
+                    @ mathutils.Matrix.Translation((0, sgn * d / 4, 0)) @ mathutils.Matrix.Rotation(sgn * math.radians(-24), 4, "X")
+                r.matrix_basis = M; parts.append(r)
+        else:
+            r = setmat(box("roof", (w + 0.3, d + 0.3, 0.3), (x, y, g + h + 0.15), coll), roof_m)
+            r.rotation_euler = b.rotation_euler.copy(); parts.append(r)
+            st = setmat(box("stair", (3.0, 3.0, 2.8), (x, y, g + h + 1.4), coll, 0.0), wall_m)
+            st.rotation_euler = b.rotation_euler.copy(); parts.append(st)
     ob = join(parts, "Village"); coll.objects.link(ob)
     return ob
 

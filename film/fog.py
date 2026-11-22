@@ -64,7 +64,7 @@ def _group(sun_dir, s_mist, h_mist, s_haze, h_haze, h0, amb, sun_col, g):
     cosv = dot.outputs["Value"]
     denom = m("POWER", m("SUBTRACT", 1 + g * g, m("MULTIPLY", cosv, 2 * g)), 1.5)
     phase = m("DIVIDE", (1 - g * g) / (4 * math.pi), denom)
-    sunterm = m("MULTIPLY", phase, 4 * math.pi * 0.55)
+    sunterm = m("MULTIPLY", phase, 4 * math.pi * 0.22)
     col = N.new("ShaderNodeMix"); col.data_type = "RGBA"; col.blend_type = "ADD"
     col.inputs["A"].default_value = (*amb, 1)
     sc = N.new("ShaderNodeMix"); sc.data_type = "RGBA"; sc.blend_type = "MULTIPLY"
@@ -79,8 +79,8 @@ def _group(sun_dir, s_mist, h_mist, s_haze, h_haze, h0, amb, sun_col, g):
     return ng
 
 
-def apply(scene, sun_dir, s_mist=0.0016, h_mist=11.0, s_haze=0.00012, h_haze=900.0, h0=1.5,
-          amb=(0.62, 0.62, 0.64), sun_col=(1.0, 0.72, 0.46), g=0.62, skip=("Mist",)):
+def apply(scene, sun_dir, s_mist=0.0012, h_mist=10.0, s_haze=0.00008, h_haze=900.0, h0=1.5,
+          amb=(0.40, 0.41, 0.44), sun_col=(1.0, 0.70, 0.42), g=0.55, skip=("Mist",)):
     """Wrap the surface output of every material with the fog group (idempotent)."""
     ng = _group(sun_dir, s_mist, h_mist, s_haze, h_haze, h0, amb, sun_col, g)
     n = 0

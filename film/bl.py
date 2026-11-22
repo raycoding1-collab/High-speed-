@@ -90,7 +90,10 @@ def set_cycles(scene, samples=64, denoise=True):
     cy.sample_clamp_indirect = 8.0
     scene.render.film_transparent = False
     scene.view_settings.view_transform = "AgX"
-    scene.view_settings.look = "None"
+    try:
+        scene.view_settings.look = "AgX - Medium High Contrast"
+    except TypeError:
+        scene.view_settings.look = "None"
 
 
 def look_at(ob, target, roll=0.0):

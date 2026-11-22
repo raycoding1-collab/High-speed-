@@ -212,7 +212,10 @@ def build_train(texdir, coll=None, raised_panto_car=6, with_interior=True):
             pb, rig = P.build_pantograph(f"Panto{i}", coll)
             pb.parent = ob; pb.location = (0.0 if True else 0, 0, 3.86)
             raised = i == raised_panto_car
-            head = (S.CONTACT_WIRE_HEIGHT - 3.86) if raised else 0.62
+            head = (S.CONTACT_WIRE_HEIGHT + 0.12 - 3.86) if raised else 0.62      # +120 mm dynamic uplift at 400 km/h
             arm = P.pose_pantograph(f"Panto{i}", coll, rig, head, pb)
+            re_ = P.build_roof_equipment(f"Car{i}_roof", coll, L)
+            if re_:
+                re_.parent = ob
             res["pantos"].append(dict(car=i, base=pb, arm=arm, rig=rig, raised=raised))
     return res
