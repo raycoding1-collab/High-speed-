@@ -1,0 +1,233 @@
+name: render-modal
+
+# Same pipeline as render-film, but the frames are rendered on Modal GPUs (10 x L40S by default) instead of
+# 40 CPU jobs: build the scene once -> copy it into a Modal volume -> render (resumable) -> encode + commit.
+# With commit_stills=true, small JPG copies of the rendered frames are committed to output/tests/ for review.
+on:
+  workflow_dispatch:
+    inputs:
+      quality:
+        description: "preview | final | final4k"
+        default: "final"
+      frames:
+        description: "frame list/range to render (empty = whole film)"
+        default: ""
+      samples:
+        description: "override samples (empty = preset)"
+        default: ""
+      gpu:
+        description: "Modal GPU type"
+        default: "L40S"
+      max_containers:
+        description: "GPUs at once (Modal free plan allows 10)"
+        default: "10"
+      commit_stills:
+        description: "commit JPG copies of the rendered frames to output/tests/<run>/"
+        type: boolean
+        default: false
+      overlay:
+        description: "burn physics numbers into the frames (preview)"
+        type: boolean
+        default: false
+      encode:
+        description: "collect + encode + commit (needs the whole film)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  PYTHON_VERSION: "3.13.18"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      first: ${{ steps.plan.outputs.first }}
+      last: ${{ steps.plan.outputs.last }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: System packages (fonts for livery lettering, ffmpeg)
+        run: sudo apt-get update -q && sudo apt-get install -y -q fonts-wqy-zenhei fonts-freefont-ttf fonts-dejavu-core
+      - name: Python packages (pinned)
+        run: |
+          python --version
+          pip install -r requirements.txt
+          python -c "import bpy; print('bpy', bpy.app.version_string, bpy.app.build_hash)"
+      - name: Cache CC0 assets
+        uses: actions/cache@v4
+        with:
+          path: assets
+          key: polyhaven-${{ hashFiles('tools/fetch_assets.py') }}
+      - name: Fetch CC0 assets (Poly Haven, MD5 verified)
+        run: python tools/fetch_assets.py assets
+      - name: Build scene once
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.samples }}" ]; then ARGS="--samples ${{ inputs.samples }}"; fi
+          python -m film.build --assets assets --out build/scene.blend --quality ${{ inputs.quality }} --texdir build/textures --pack $ARGS
+          ls -la build
+      - name: Physics log + sound
+        run: |
+          python -m film.physics build/physics.json
+          python -m film.audio build/audio.wav
+      - name: Plan matrix
+        id: plan
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          n = 1                                  # Modal renders everything from one orchestrating job
+          print("matrix=" + json.dumps(list(range(n))))
+          print("first=1")
+          print("last=1560")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scene
+          path: |
+            build/scene.blend
+            build/physics.json
+            build/audio.wav
+          retention-days: 7
+          compression-level: 0
+
+  render:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+      MODAL_GPU: ${{ inputs.gpu }}
+      MODAL_MAX_CONTAINERS: ${{ inputs.max_containers }}
+      SCENE_NAME: scene-${{ github.run_id }}.blend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install modal==1.6.4 pillow==13.0.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: scene
+          path: build
+      - name: Resume - frames from earlier attempts of this run
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: frames-modal-*
+          path: frames
+          merge-multiple: true
+      - name: Copy the scene into the Modal volume
+        run: |
+          modal volume create cr450-scene || true
+          modal volume put --force cr450-scene build/scene.blend "/$SCENE_NAME"
+      - name: Render on Modal GPUs
+        run: |
+          FR="${{ inputs.frames }}"; [ -n "$FR" ] || FR="${{ needs.build.outputs.first }}-${{ needs.build.outputs.last }}"
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY" || true
+          print("Modal render: GPU ${{ inputs.gpu }} x ${{ inputs.max_containers }}")
+          PY
+          modal run tools/modal_render.py --blend "$SCENE_NAME" --frames "$FR" --out frames ${{ inputs.samples != '' && format('--samples {0}', inputs.samples) || '' }}
+      - name: Timing summary
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          p = "frames/timing_modal.json"
+          if os.path.exists(p):
+              d = json.load(open(p)); s = [f["seconds"] for f in d["frames"]]
+              if s:
+                  print(f"Modal {d['gpu']} x {d['containers']}: {len(s)} frames, wall {d['wall_s']/60:.1f} min, "
+                        f"mean {sum(s)/len(s):.1f} s/frame, max {max(s):.1f} s, failed {len(d['failed'])}")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frames-modal-a${{ github.run_attempt }}
+          path: frames
+          retention-days: 7
+          compression-level: 0
+      - name: Commit review stills (JPG)
+        if: ${{ inputs.commit_stills }}
+        run: |
+          mkdir -p output/tests/${{ github.run_id }}
+          python - <<'PY'
+          import glob, os, shutil
+          from PIL import Image
+          d = "output/tests/${{ github.run_id }}"
+          for p in sorted(glob.glob("frames/frame_*.png")):
+              Image.open(p).convert("RGB").save(os.path.join(d, os.path.basename(p)[:-4] + ".jpg"), quality=92)
+          if os.path.exists("frames/timing_modal.json"):
+              shutil.copy("frames/timing_modal.json", d)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/tests
+          git commit -m "Review stills from Modal run ${{ github.run_id }}" || exit 0
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+      - name: Remove the scene from the Modal volume
+        if: always()
+        run: modal volume rm cr450-scene "/$SCENE_NAME" || true
+
+  encode:
+    needs: [build, render]
+    if: ${{ inputs.encode && inputs.frames == '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg fonts-dejavu-core
+          pip install pillow==13.0.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: scene
+          path: build
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: frames-*
+          path: frames
+          merge-multiple: true
+      - name: Validate + encode (refuses on missing/incomplete frames)
+        run: |
+          mkdir -p out
+          Q=${{ inputs.quality }}
+          OV=""
+          if [ "${{ inputs.overlay }}" = "true" ]; then OV="--overlay build/physics.json"; fi
+          python tools/encode.py --frames frames --first ${{ needs.build.outputs.first }} --last ${{ needs.build.outputs.last }} \
+            --audio build/audio.wav --out out/cr450_${Q}.mp4 --ig out/cr450_${Q}_instagram.mp4 \
+            --yt4k out/cr450_${Q}_youtube_4k.mp4 $OV --report out/report_${Q}.json
+          cat out/report_${Q}.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: film-${{ inputs.quality }}
+          path: out
+          retention-days: 30
+      - name: Commit film to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p output
+          for f in out/*.mp4; do
+            sz=$(stat -c %s "$f")
+            if [ "$sz" -lt 99000000 ]; then cp "$f" output/; else echo "skip $f ($sz bytes > GitHub 100 MB limit)"; fi
+          done
+          cp out/report_*.json output/
+          git add output
+          git commit -m "Rendered film (${{ inputs.quality }}) from run ${{ github.run_id }}" || exit 0
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
