@@ -1,0 +1,62 @@
+{
+ "gpu": "L40S",
+ "containers": 9,
+ "wall_s": 261.7,
+ "frames": [
+  {
+   "frame": 373,
+   "seconds": 71.08,
+   "camera": "CAM_S3_drone",
+   "device": "NVIDIA L40S (OPTIX)"
+  },
+  {
+   "frame": 745,
+   "seconds": 75.19,
+   "camera": "CAM_S5_cab",
+   "device": "NVIDIA L40S (OPTIX)"
+  },
+  {
+   "frame": 553,
+   "seconds": 76.49,
+   "camera": "CAM_S4_heli",
+   "device": "NVIDIA L40S (OPTIX)"
+  },
+  {
+   "frame": 85,
+   "seconds": 83.02,
+   "camera": "CAM_S1_aerial",
+   "device": "NVIDIA L40S (OPTIX)"
+  },
+  {
+   "frame": 901,
+   "seconds": 75.31,
+   "camera": "CAM_S6_panto",
+   "device": "NVIDIA L40S (OPTIX)"
+  },
+  {
+   "frame": 229,
+   "seconds": 88.44,
+   "camera": "CAM_S2_paddy_low",
+   "device": "NVIDIA L40S (OPTIX)"
+  },
+  {
+   "frame": 1033,
+   "seconds": 79.86,
+   "camera": "CAM_S7_cutting_low",
+   "device": "NVIDIA L40S (OPTIX)"
+  },
+  {
+   "frame": 1189,
+   "seconds": 80.65,
+   "camera": "CAM_S8_tele",
+   "device": "NVIDIA L40S (OPTIX)"
+  },
+  {
+   "frame": 1417,
+   "seconds": 104.68,
+   "camera": "CAM_S9_portal",
+   "device": "NVIDIA L40S (OPTIX)"
+  }
+ ],
+ "failed": []
+}
