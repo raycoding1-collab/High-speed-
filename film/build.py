@@ -189,7 +189,7 @@ def _train_aim(sh, t):
     return A.frame(np.array([sh.s_head(t)]), off)[0][0]
 
 
-def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None):
+def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None, pack=False):
     t0 = time.time()
     q = QUALITY[quality]
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -248,6 +248,9 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
             pass
     sc.render.film_transparent = False
     bpy.ops.file.make_paths_relative() if False else None
+    if pack:
+        log("packing all images into the .blend")
+        bpy.ops.file.pack_all()
     log("saving", out)
     bpy.ops.wm.save_as_mainfile(filepath=os.path.abspath(out), compress=True)
     log(f"done in {time.time() - t0:.0f} s")
@@ -359,9 +362,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--assets", required=True); ap.add_argument("--out", required=True)
     ap.add_argument("--quality", default="preview"); ap.add_argument("--no-veg", action="store_true")
-    ap.add_argument("--texdir", default=None)
+    ap.add_argument("--texdir", default=None); ap.add_argument("--pack", action="store_true")
+    ap.add_argument("--samples", type=int, default=None)
     a = ap.parse_args(sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:])
-    build(a.assets, a.out, a.quality, not a.no_veg, a.texdir)
+    if a.samples:
+        QUALITY[a.quality]["samples"] = a.samples
+    build(a.assets, a.out, a.quality, not a.no_veg, a.texdir, pack=a.pack)
 
 
 if __name__ == "__main__":

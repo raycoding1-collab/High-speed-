@@ -1,0 +1,208 @@
+name: render-film
+
+on:
+  workflow_dispatch:
+    inputs:
+      quality:
+        description: "preview | final | final4k"
+        default: "preview"
+      jobs:
+        description: "number of render jobs (max 20 run at once; more run in batches of 20)"
+        default: "20"
+      frames:
+        description: "frame list/range to render (empty = whole film)"
+        default: ""
+      samples:
+        description: "override samples (empty = preset)"
+        default: ""
+      overlay:
+        description: "burn physics numbers into the frames (preview)"
+        type: boolean
+        default: true
+      encode:
+        description: "collect + encode + commit (needs the whole film)"
+        type: boolean
+        default: true
+      resume_run_id:
+        description: "optional: earlier run id whose finished frames should be reused"
+        default: ""
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  PYTHON_VERSION: "3.13.18"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      first: ${{ steps.plan.outputs.first }}
+      last: ${{ steps.plan.outputs.last }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: System packages (fonts for livery lettering, ffmpeg)
+        run: sudo apt-get update -q && sudo apt-get install -y -q fonts-wqy-zenhei fonts-freefont-ttf fonts-dejavu-core
+      - name: Python packages (pinned)
+        run: |
+          python --version
+          pip install -r requirements.txt
+          python -c "import bpy; print('bpy', bpy.app.version_string, bpy.app.build_hash)"
+      - name: Cache CC0 assets
+        uses: actions/cache@v4
+        with:
+          path: assets
+          key: polyhaven-${{ hashFiles('tools/fetch_assets.py') }}
+      - name: Fetch CC0 assets (Poly Haven, MD5 verified)
+        run: python tools/fetch_assets.py assets
+      - name: Build scene once
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.samples }}" ]; then ARGS="--samples ${{ inputs.samples }}"; fi
+          python -m film.build --assets assets --out build/scene.blend --quality ${{ inputs.quality }} --texdir build/textures --pack $ARGS
+          ls -la build
+      - name: Physics log + sound
+        run: |
+          python -m film.physics build/physics.json
+          python -m film.audio build/audio.wav
+      - name: Plan matrix
+        id: plan
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          n = int("${{ inputs.jobs }}")
+          print("matrix=" + json.dumps(list(range(n))))
+          print("first=1")
+          print("last=1560")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scene
+          path: |
+            build/scene.blend
+            build/physics.json
+            build/audio.wav
+          retention-days: 7
+          compression-level: 0
+
+  render:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        job: ${{ fromJSON(needs.build.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: scene
+          path: build
+      - name: Resume - frames from earlier attempts of this run
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: frames-${{ matrix.job }}-*
+          path: frames
+          merge-multiple: true
+      - name: Resume - frames from an earlier run
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: frames-${{ matrix.job }}-*
+          path: frames
+          merge-multiple: true
+          run-id: ${{ inputs.resume_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Render interleaved frames
+        run: |
+          nproc; lscpu | grep -E "Model name|^CPU\(s\)" || true
+          FR="${{ inputs.frames }}"
+          ARGS=""
+          if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
+          python tools/render_frames.py --blend build/scene.blend --out frames --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} \
+            --deadline-min 335 --timing frames/timing_${{ matrix.job }}.json $ARGS
+      - name: Timing summary
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, glob
+          for f in glob.glob("frames/timing_*.json"):
+              d = json.load(open(f)); s = d["seconds"]
+              if s:
+                  print(f"job {d['job']}: {len(s)} frames, mean {sum(s)/len(s):.1f} s/frame, max {max(s):.1f} s, total {d['total_min']:.1f} min, {d['res']} @ {d['samples']} spp")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frames-${{ matrix.job }}-a${{ github.run_attempt }}
+          path: frames
+          retention-days: 7
+          compression-level: 0
+
+  encode:
+    needs: [build, render]
+    if: ${{ inputs.encode && inputs.frames == '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg fonts-dejavu-core
+          pip install pillow==13.0.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: scene
+          path: build
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: frames-*
+          path: frames
+          merge-multiple: true
+      - name: Validate + encode (refuses on missing/incomplete frames)
+        run: |
+          mkdir -p out
+          Q=${{ inputs.quality }}
+          OV=""
+          if [ "${{ inputs.overlay }}" = "true" ]; then OV="--overlay build/physics.json"; fi
+          python tools/encode.py --frames frames --first ${{ needs.build.outputs.first }} --last ${{ needs.build.outputs.last }} \
+            --audio build/audio.wav --out out/cr450_${Q}.mp4 --ig out/cr450_${Q}_instagram.mp4 $OV --report out/report_${Q}.json
+          cat out/report_${Q}.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: film-${{ inputs.quality }}
+          path: out
+          retention-days: 30
+      - name: Commit film to the repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p output
+          for f in out/*.mp4; do
+            sz=$(stat -c %s "$f")
+            if [ "$sz" -lt 99000000 ]; then cp "$f" output/; else echo "skip $f ($sz bytes > GitHub 100 MB limit)"; fi
+          done
+          cp out/report_*.json output/
+          git add output
+          git commit -m "Rendered film (${{ inputs.quality }}) from run ${{ github.run_id }}" || exit 0
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

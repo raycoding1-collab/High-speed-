@@ -1,0 +1,7 @@
+# exact versions used locally and in CI (Python 3.13.18)
+bpy==5.3.0
+numpy==2.5.5
+scipy==1.18.1
+pillow==13.0.0
+soundfile==0.14.0
+pyloudnorm==0.2.0
