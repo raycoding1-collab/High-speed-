@@ -442,13 +442,15 @@ def _sightline_mask(p, clear=9.0):
         for t in np.linspace(0.0, sh.sim_dur, 5):
             c = np.asarray(sh.cam_fn(t)); a = np.asarray(sh.aim_fn(t))
             d = a - c; L = np.linalg.norm(d); d = d / L
-            v = p - c
             long = sh.lens >= 100
-            tt = np.clip(v @ d, 0, L if long else min(L, 400))
-            dist = np.linalg.norm(v - tt[:, None] * d[None, :], axis=1)
-            # crowns are up to ~9 m in radius and 17 m tall: a long lens needs a wider clear corridor
-            keep &= dist > np.maximum(18.0 if long else clear, 0.04 * tt)
-            keep &= np.linalg.norm(v, axis=1) > (45.0 if long else 20.0)   # nothing growing right at the camera
+            # the points are tree BASES: test the whole trunk-to-crown height (0-18 m), a fir standing below the
+            # line of sight reaches up into it (that is what kept blocking the 600 mm frame)
+            for hz in (0.0, 6.0, 12.0, 18.0):
+                v = p + np.array([0.0, 0.0, hz]) - c
+                tt = np.clip(v @ d, 0, L if long else min(L, 400))
+                dist = np.linalg.norm(v - tt[:, None] * d[None, :], axis=1)
+                keep &= dist > np.maximum(14.0 if long else clear, 0.04 * tt)
+            keep &= np.linalg.norm(p - c, axis=1) > (45.0 if long else 20.0)   # nothing growing right at the camera
     return keep
 
 
