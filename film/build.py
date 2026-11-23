@@ -142,7 +142,7 @@ def _fcurves(action):
 
 
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
-SHOT_EXPOSURE = {"S6": -1.2, "S7": 0.5, "S9": 0.6, "SX": 0.3}
+SHOT_EXPOSURE = {"S6": -1.6, "S7": 0.5, "S9": 0.6, "SX": 0.3}
 
 
 def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
@@ -204,7 +204,7 @@ def key_shot_exposure(scene, shots):
                     kp.interpolation = "CONSTANT"
 
 
-FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car3", "S9": 60.0, "SX": 80.0}
+FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car1", "S9": 60.0, "SX": 80.0}
 
 
 def make_cameras(scene, shots, res):

@@ -339,7 +339,7 @@ def terrain_material(tex, paddy_img):
     lm.inputs[1].default_value = 0.0      # v3: the lattice is real geometry now (infra.build_cutting_details)
     cz = nt.nodes.new("ShaderNodeAttribute"); cz.attribute_name = "cutzone"
     hydro = nt.nodes.new("ShaderNodeMix"); hydro.data_type = "RGBA"; hydro.blend_type = "MULTIPLY"; hydro.inputs["Factor"].default_value = 1.0
-    hydro.inputs["B"].default_value = (0.55, 0.85, 0.24, 1)                   # hydroseeded slope grass: lush and bright
+    hydro.inputs["B"].default_value = (0.36, 0.56, 0.17, 1)                   # hydroseeded slope grass (v3: no pale scar in the sun)
     L(gbw.outputs[0], hydro.inputs["A"])
     cutgrass = nt.nodes.new("ShaderNodeMix"); cutgrass.data_type = "RGBA"; L(cz.outputs["Fac"], cutgrass.inputs["Factor"])
     L(allc.outputs["Result"], cutgrass.inputs["A"]); L(hydro.outputs["Result"], cutgrass.inputs["B"])
