@@ -84,5 +84,25 @@ def setup(scene, visibility=7500.0, haze=(0.78, 0.70, 0.60), haze_gain=0.9, grad
             if nm in ld.inputs:
                 ld.inputs[nm].default_value = v
         L(img, ld.inputs["Image"]); img = ld.outputs["Image"]
+        # natural lens vignetting (cos^4 fall-off of a real lens): -0.35 stop at the corners, none in the centre
+        try:
+            tex = N.new("CompositorNodeEllipseMask")
+            tex.inputs["Size"].default_value = (1.35, 1.35)          # ellipse reaches just past the frame corners
+            bl = N.new("CompositorNodeBlur")
+            bl.inputs["Size"].default_value = (420, 420)
+            try:
+                bl.inputs["Type"].default_value = "Fast Gaussian"
+            except Exception:
+                pass
+            L(tex.outputs[0], bl.inputs["Image"])
+            vg = math("ADD", math("MULTIPLY", bl.outputs[0], 0.22), 0.78)
+            mul = N.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs["Factor"].default_value = 1.0
+            L(img, mul.inputs["A"])
+            cv = N.new("CompositorNodeCombineColor")
+            for i in range(3):
+                L(vg, cv.inputs[i])
+            L(cv.outputs[0], mul.inputs["B"]); img = mul.outputs["Result"]
+        except Exception as e:
+            print("[post] vignette skipped:", e)
     L(img, out.inputs["Image"])
     return ng

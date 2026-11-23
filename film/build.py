@@ -273,7 +273,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     sc.render.motion_blur_position = "START"
     sc.view_settings.view_transform = "AgX"
     try:
-        sc.view_settings.look = "AgX - Base Contrast"
+        sc.view_settings.look = "AgX - Medium High Contrast"    # v3: filmic contrast, deeper blacks, same highlight roll-off
     except TypeError:
         pass
     texdir = texdir or os.path.join(os.path.dirname(out), "textures")
