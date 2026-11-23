@@ -155,7 +155,7 @@ def build_shots():
     # curving viaduct as the train draws away towards the forested hills - the low sun is straight behind the lens,
     # so train, viaduct and hills are front-lit in gold and compressed into one plane (a head-on view would look
     # straight into the sun)
-    c8 = _rail(2330, 70.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 10.0
+    c8 = _rail(2330, 70.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 25.0   # crane / hilltop: clears the hamlet roofs
     s8_0 = 2700.0 + S.TRAIN_LENGTH                         # tail at s 2700 when the shot starts
     shots.append(Shot("S8_tele", 9.0, s8_0, 600,
                       "600 mm from a camera tower beside the line, looking east along the curve: the train draws away into the golden, forested hills",

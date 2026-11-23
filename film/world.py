@@ -283,7 +283,7 @@ def terrain_material(tex, paddy_img):
     pz2 = nt.nodes.new("ShaderNodeMath"); pz2.operation = "MULTIPLY"; L(pz.outputs[0], pz2.inputs[0]); L(pimg.outputs["Alpha"], pz2.inputs[1])
     # rice colour: young green to yellow-green by field variation
     rice = nt.nodes.new("ShaderNodeValToRGB")
-    rice.color_ramp.elements[0].color = (0.045, 0.13, 0.016, 1); rice.color_ramp.elements[1].color = (0.15, 0.25, 0.04, 1)
+    rice.color_ramp.elements[0].color = (0.055, 0.12, 0.020, 1); rice.color_ramp.elements[1].color = (0.165, 0.225, 0.05, 1)   # v3: less saturated, a touch riper
     rice.color_ramp.elements.new(0.35).color = (0.07, 0.18, 0.02, 1)
     rice.color_ramp.elements.new(0.70).color = (0.10, 0.21, 0.03, 1)
     L(field_var, rice.inputs[0])

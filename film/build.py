@@ -142,7 +142,7 @@ def _fcurves(action):
 
 
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
-SHOT_EXPOSURE = {"S7": 0.5, "S9": 0.6, "SX": 0.3}
+SHOT_EXPOSURE = {"S6": -0.6, "S7": 0.5, "S9": 0.6, "SX": 0.3}
 
 
 def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
@@ -181,6 +181,14 @@ def key_shot_exposure(scene, shots):
         scene.view_settings.keyframe_insert("exposure", frame=f0)
         scene.view_settings.white_balance_temperature = SHOT_WB.get(sh.name[:2], 6500.0)
         scene.view_settings.keyframe_insert("white_balance_temperature", frame=f0)
+    s7 = [(sh, f0, f1) for sh, f0, f1 in SH.timeline(shots) if sh.name.startswith("S7")]
+    if s7:
+        sh, f0, f1 = s7[0]
+        for f in range(f0, f1 + 1):
+            t = sh.sim((f - f0) / SH.FPS)
+            w = min(max((t - 2.55) / 0.35, 0.0), 1.0); w = w * w * (3 - 2 * w)
+            scene.view_settings.exposure = SHOT_EXPOSURE["S7"] + 1.3 * w
+            scene.view_settings.keyframe_insert("exposure", frame=f)
     # the finale fades to black over its last 1.25 s (per-frame keys, so CONSTANT interpolation is fine)
     sx = [(sh, f0, f1) for sh, f0, f1 in SH.timeline(shots) if sh.name.startswith("SX")]
     if sx:
@@ -451,11 +459,12 @@ def _sightline_mask(p, clear=9.0):
             long = sh.lens >= 100
             # the points are tree BASES: test the whole trunk-to-crown height (0-18 m), a fir standing below the
             # line of sight reaches up into it (that is what kept blocking the 600 mm frame)
+            beyond = ((p - c) @ d) > L + 3.0                     # behind the target: cannot block the view of it
             for hz in (0.0, 6.0, 12.0, 18.0):
                 v = p + np.array([0.0, 0.0, hz]) - c
                 tt = np.clip(v @ d, 0, L if long else min(L, 400))
                 dist = np.linalg.norm(v - tt[:, None] * d[None, :], axis=1)
-                keep &= dist > np.maximum(14.0 if long else clear, 0.04 * tt)
+                keep &= beyond | (dist > np.maximum(14.0 if long else clear, 0.04 * tt))
             keep &= np.linalg.norm(p - c, axis=1) > (45.0 if long else 20.0)   # nothing growing right at the camera
     return keep
 
