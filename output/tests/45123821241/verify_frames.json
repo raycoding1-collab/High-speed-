@@ -1,0 +1,53 @@
+{
+ "frames": [
+  {
+   "file": "frame_00396.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.431,
+   "shadow_teal": -5.6,
+   "pass": true
+  },
+  {
+   "file": "frame_00792.png",
+   "clip_pct": 0.0,
+   "crush_pct": 9.01,
+   "mean_luma": 0.232,
+   "shadow_teal": 4.7,
+   "pass": true
+  },
+  {
+   "file": "frame_01120.png",
+   "clip_pct": 0.1,
+   "crush_pct": 10.3,
+   "mean_luma": 0.17,
+   "shadow_teal": -12.5,
+   "pass": false
+  },
+  {
+   "file": "frame_01340.png",
+   "clip_pct": 0.01,
+   "crush_pct": 0.0,
+   "mean_luma": 0.331,
+   "shadow_teal": -2.2,
+   "pass": true
+  },
+  {
+   "file": "frame_01608.png",
+   "clip_pct": 0.01,
+   "crush_pct": 0.15,
+   "mean_luma": 0.228,
+   "shadow_teal": -7.7,
+   "pass": true
+  },
+  {
+   "file": "frame_01658.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.02,
+   "mean_luma": 0.281,
+   "shadow_teal": -6.9,
+   "pass": true
+  }
+ ],
+ "result": "FAIL"
+}
