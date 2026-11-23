@@ -1,0 +1,117 @@
+{
+ "frames": [
+  {
+   "file": "frame_00049.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.366,
+   "shadow_teal": -6.8,
+   "pass": true
+  },
+  {
+   "file": "frame_00096.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.49,
+   "shadow_teal": -4.9,
+   "pass": true
+  },
+  {
+   "file": "frame_00252.png",
+   "clip_pct": 0.03,
+   "crush_pct": 0.0,
+   "mean_luma": 0.522,
+   "shadow_teal": -8.1,
+   "pass": true
+  },
+  {
+   "file": "frame_00396.png",
+   "clip_pct": 0.04,
+   "crush_pct": 0.0,
+   "mean_luma": 0.517,
+   "shadow_teal": 0.2,
+   "pass": true
+  },
+  {
+   "file": "frame_00588.png",
+   "clip_pct": 0.01,
+   "crush_pct": 0.0,
+   "mean_luma": 0.537,
+   "shadow_teal": -5.9,
+   "pass": true
+  },
+  {
+   "file": "frame_00792.png",
+   "clip_pct": 0.0,
+   "crush_pct": 7.41,
+   "mean_luma": 0.343,
+   "shadow_teal": 3.6,
+   "pass": true
+  },
+  {
+   "file": "frame_00948.png",
+   "clip_pct": 0.25,
+   "crush_pct": 0.0,
+   "mean_luma": 0.554,
+   "shadow_teal": 0.8,
+   "pass": true
+  },
+  {
+   "file": "frame_01057.png",
+   "clip_pct": 0.0,
+   "crush_pct": 1.15,
+   "mean_luma": 0.329,
+   "shadow_teal": 4.3,
+   "pass": true
+  },
+  {
+   "file": "frame_01111.png",
+   "clip_pct": 0.68,
+   "crush_pct": 9.2,
+   "mean_luma": 0.166,
+   "shadow_teal": -1.5,
+   "pass": true
+  },
+  {
+   "file": "frame_01155.png",
+   "clip_pct": 0.21,
+   "crush_pct": 4.79,
+   "mean_luma": 0.278,
+   "shadow_teal": 0.9,
+   "pass": true
+  },
+  {
+   "file": "frame_01250.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.399,
+   "shadow_teal": -5.5,
+   "pass": true
+  },
+  {
+   "file": "frame_01340.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.318,
+   "shadow_teal": -4.7,
+   "pass": true
+  },
+  {
+   "file": "frame_01440.png",
+   "clip_pct": 0.04,
+   "crush_pct": 0.0,
+   "mean_luma": 0.291,
+   "shadow_teal": -4.4,
+   "pass": true
+  },
+  {
+   "file": "frame_01538.png",
+   "clip_pct": 0.0,
+   "crush_pct": 0.0,
+   "mean_luma": 0.16,
+   "shadow_teal": 7.6,
+   "pass": true
+  }
+ ],
+ "result": "PASS"
+}
