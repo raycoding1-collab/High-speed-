@@ -654,6 +654,10 @@ def _leaf_material(name, c0, c1, vor_scale, bump, sss):
     e = tint.color_ramp.elements
     e[0].position = 0.0; e[0].color = (0.80, 0.92, 0.75, 1); e[1].position = 1.0; e[1].color = (1.22, 1.08, 0.80, 1)
     mid = e.new(0.5); mid.color = (1.0, 1.0, 1.0, 1)
+    if name == "CrownLeaves":            # late October: a few Chinese tallow / early-turning trees among the greens
+        e[1].position = 0.93
+        t1 = e.new(0.935); t1.color = (3.2, 1.6, 0.55, 1)            # amber-yellow
+        t2 = e.new(0.97); t2.color = (4.0, 0.9, 0.35, 1)             # tallow red
     L(oi.outputs["Random"], tint.inputs[0])
     mul = nt.nodes.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs["Factor"].default_value = 1.0
     L(cr.outputs[0], mul.inputs["A"]); L(tint.outputs[0], mul.inputs["B"]); L(mul.outputs["Result"], p.inputs["Base Color"])

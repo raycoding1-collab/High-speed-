@@ -490,6 +490,15 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         rp = rp[np.abs(l_) > 22.0]                  # roads pass under the viaduct: no trees between the piers
         vp = np.concatenate([vp, np.column_stack([rp, W.ground(rp[:, 0], rp[:, 1])])])
         log("  road-side trees", len(rp))
+    s5 = [x for x in SH.build_shots() if x.name.startswith("S5")][0]
+    ss5 = rng.uniform(s5.s0 - 50, s5.s0 + S.SPEED * s5.sim_dur + 250, 2600)
+    ll5 = rng.choice([-1, 1], len(ss5)) * rng.uniform(24, 70, len(ss5))
+    th5 = A.heading(ss5); x5, y5 = A.xy(ss5)
+    gx5, gy5 = x5 - np.sin(th5) * ll5, y5 + np.cos(th5) * ll5
+    k5 = W._clear_of_features(gx5, gy5, 4.0, river=21.0) & (rng.random(len(ss5)) < 0.75)
+    side5 = np.column_stack([gx5[k5], gy5[k5], W.ground(gx5[k5], gy5[k5])])
+    side5 = side5[_sightline_mask(side5, 9.0)]                     # keep the 600 mm and other static views clear
+    log("  trees beside the viaduct on the cab run", len(side5))
     vp = vp[_sightline_mask(vp, 9.0)]
     from . import village as V
     if V.SITES:                                     # no tree grows through a house (houses are <= 14 m across)
@@ -522,14 +531,22 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     is_bamboo = (river_d < 45.0) | (near_h & (rng.random(len(vp)) < 0.45))
     log("  valley trees (crown clumps)", int((~is_bamboo).sum()), "bamboo clumps", int(is_bamboo.sum()))
     # trees the S1 drone flies over (within 230 m of its path) are real broadleaf models, not crown proxies
-    s1 = [x for x in SH.build_shots() if x.name.startswith("S1")][0]
-    path = np.array([np.asarray(s1.cam_fn(t))[:2] for t in np.linspace(0, s1.sim_dur, 30)])
-    d1 = np.min(np.hypot(vp[:, 0, None] - path[None, :, 0], vp[:, 1, None] - path[None, :, 1]), axis=1)
-    near1 = (d1 < 230.0) & ~is_bamboo
+    path = []
+    for sh_ in SH.build_shots():
+        if sh_.name[:2] in ("S1", "S3", "S4") and sh_.cam_fn is not None:
+            reach = 230.0 if sh_.name.startswith("S1") else 650.0
+            for t in np.linspace(0, sh_.sim_dur, 30):
+                c_ = np.asarray(sh_.cam_fn(t)); path.append((c_[0], c_[1], reach))
+    path = np.array(path)
+    d1 = np.hypot(vp[:, 0, None] - path[None, :, 0], vp[:, 1, None] - path[None, :, 1]) - path[None, :, 2]
+    near1 = (np.min(d1, axis=1) < 0) & ~is_bamboo
     if "tree4" in models and near1.any():
         W.scatter_tree("VegValleyNearS1", coll, vp[near1], [models["tree4"]], (1.3, 1.9), 16, wind=0.03)
-    log("  real broadleaf trees under the S1 drone", int(near1.sum()))
+    log("  real broadleaf trees near the S1/S3/S4 cameras", int(near1.sum()))
     W.scatter_tree("VegValleyCopses", coll, vp[~is_bamboo & ~near1], crowns, (2.2, 5.5), 6, wind=0.0)
+    if "tree4" in models and len(side5):
+        side5 = side5[clear_of_props(side5)]
+        W.scatter_tree("VegViaductSide", coll, side5, [models["tree4"]] + conifers[1:2], (1.2, 1.9), 17, wind=0.03)
     W.scatter_tree("VegValleyBamboo", coll, vp[is_bamboo], bamboo, (3.2, 4.6), 7, wind=0.0)
     # the hill massif around the cutting: forest its broad flanks (seen from the cab and the long lens) where
     # the real-tree corridor strip ends; keep 150 m from the low cameras that look at it close up
