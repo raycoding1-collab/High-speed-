@@ -540,8 +540,9 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     ax, ay = A.xy(np.arange(2600.0, A.S_MAX, 100.0))
     def massif_tris(c):
         d = np.min(np.hypot(c[:, 0, None] - ax[None, :], c[:, 1, None] - ay[None, :]), axis=1)
-        return (W.natural_ground(c[:, 0], c[:, 1]) > 7.0) & (d < 1600.0)
-    pts = W.sample_surface([far], 0.02 * scale, rng, massif, max_n=160000, tri_filter=massif_tris)
+        return (W.natural_ground(c[:, 0], c[:, 1]) > 7.0) & (d < 1400.0)
+    # (memory: every instance costs ~15-20 KB in the render; 85k far crowns still cover the hills seen at 1-3 km)
+    pts = W.sample_surface([far], 0.014 * scale, rng, massif, max_n=100000, tri_filter=massif_tris)
     pts = pts[clear_of_props(pts)] if len(pts) else pts
     # real conifers where the cameras are close (within 500 m of the cutting / portal: cab, trackside, 600 mm,
     # portal), simplified crowns beyond
