@@ -142,7 +142,7 @@ def _fcurves(action):
 
 
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
-SHOT_EXPOSURE = {"S6": -1.6, "S7": 0.5, "S9": 0.6, "SX": 0.3}
+SHOT_EXPOSURE = {"S6": -1.6, "S7": 0.5, "S9": 0.1, "SX": 0.3}   # S9: fully sunlit top-down view (+0.6 bleached the grass to sand)
 
 
 def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
@@ -171,7 +171,7 @@ def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
 
 # camera white balance per shot, like a DP setting the camera for the light it shoots in: the cutting shots lie
 # in shade lit by the blue morning sky (~8000 K), so they are balanced for shade instead of rendering cold navy
-SHOT_WB = {"S7": 7000.0, "S9": 7000.0, "SX": 6800.0}
+SHOT_WB = {"S7": 7000.0, "S9": 6500.0, "SX": 6800.0}
 
 
 def key_shot_exposure(scene, shots):
