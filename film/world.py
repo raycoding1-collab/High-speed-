@@ -52,7 +52,10 @@ def _tower_r(i, ang, zf, R):
     return R * (1 + 0.22 * np.sin(3 * ang + i + 2.0 * zf) + 0.13 * np.sin(5 * ang + 2 * i - 3 * zf)
                 + 0.08 * np.sin(9 * ang + 3 * i + 5 * zf) + 0.05 * np.sin(17 * ang + i + 9 * zf)
                 + 0.035 * np.sin(29 * ang + 2 * i + 4 * zf) + 0.02 * np.sin(47 * ang + i)
-                + 0.06 * np.sin(7 * ang + 5 * i + 11 * zf) * zf)
+                + 0.06 * np.sin(7 * ang + 5 * i + 11 * zf) * zf
+                # v3: sharp V-shaped solution flutes and stepped bedding ledges / overhangs break the sculpted look
+                - 0.05 * np.abs(np.sin(23 * ang + i + 3 * zf)) - 0.03 * np.abs(np.sin(61 * ang + 2 * i))
+                + 0.045 * (np.mod(zf * 7.0 + 0.3 * np.sin(2 * ang + i), 1.0) - 0.5))
 
 
 def tower_profile(i, d):
@@ -996,7 +999,7 @@ def rice_clump(name, coll, seed=0):
     return ob
 
 
-def scatter_rice(coll, src_coll, centre, radius=40.0, paddy_img_path=None, seed=9):
+def scatter_rice(coll, src_coll, centre, radius=40.0, paddy_img_path=None, seed=9, keep_fn=None):
     """Rice hills in transplant rows (0.25 x 0.30 m) around a camera, skipping dikes."""
     from PIL import Image
     rng = np.random.default_rng(seed)
@@ -1015,6 +1018,8 @@ def scatter_rice(coll, src_coll, centre, radius=40.0, paddy_img_path=None, seed=
         px = ((X - PADDY_X0)).astype(int).clip(0, img.shape[1] - 1); py = ((Y - PADDY_Y0)).astype(int).clip(0, img.shape[0] - 1)
         keep &= img[py, px, 1] < 60                                   # not on a dike
         keep &= img[py, px, 2] < 150                                  # rice / ripening fields only
+    if keep_fn is not None:
+        keep &= keep_fn(X, Y)
     X, Y = X[keep], Y[keep]
     Z = natural_ground(X, Y)
     pts = np.stack([X, Y, Z], -1)

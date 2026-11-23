@@ -144,6 +144,30 @@ def _fcurves(action):
 SHOT_EXPOSURE = {"S7": 1.0, "S9": 1.2}
 
 
+def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
+    """Shutter across the speed ramps, like a high-speed camera: 180 deg (1/48 s) at real time, easing to a
+    1/2000 s exposure at the slowest playback, so slow-motion frames are razor sharp (train blur 111 m/s x 1/2000 s
+    = 5.6 cm instead of 2.3 m).  Exposure interpolates logarithmically with the playback speed; the shutter value
+    is in screen frames: frac = exposure x 24 / playback speed."""
+    frames, vals = [], []
+    for sh, f0, f1 in SH.timeline(shots):
+        for f in range(f0, f1 + 1):
+            sp = sh.speed(sh.sim((f - f0) / SH.FPS)) if sh.ramp else 1.0
+            if sh.ramp:
+                lo = sh.ramp[2]
+                w = float(np.clip((sp - lo) / (1.0 - lo), 0.0, 1.0))
+                expo = math.exp(w * math.log(1.0 / 48.0) + (1 - w) * math.log(t_fast))
+                frac = min(0.5, expo * SH.FPS / max(sp, 1e-3))
+            else:
+                frac = 0.5
+            frames.append(f); vals.append(frac)
+    for f, v in zip(frames, vals):
+        scene.render.motion_blur_shutter = v
+        scene.render.keyframe_insert("motion_blur_shutter", frame=f)
+    scene.render.motion_blur_shutter = 0.5
+    log("  shutter keyed: min", round(min(vals), 3), "frames")
+
+
 def key_shot_exposure(scene, shots):
     for sh, f0, f1 in SH.timeline(shots):
         scene.view_settings.exposure = SHOT_EXPOSURE.get(sh.name[:2], 0.0)
@@ -316,6 +340,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     key_grass_wake(shots)
     make_cameras(sc, shots, res)
     key_shot_exposure(sc, shots)
+    key_shutter(sc, shots)
     for ob in res["wheelsets"]:
         try:
             ob.cycles.motion_steps = 6
@@ -512,14 +537,54 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     c2 = [s for s in SH.build_shots() if s.name.startswith("S2")][0].cam_fn(0)
     def near_c2(p, n):
         return np.hypot(p[:, 0] - c2[0], p[:, 1] - c2[1]) < 60
-    W.scatter_rice(coll, src, c2, 42.0 if scale >= 1 else 25.0, PADDY_PATH[0])
-    # S2 foreground (v3): three real trees standing on the field bunds just inside the frame edges, 28-41 m from
-    # the tripod, so the low shot has depth in front of the viaduct (they rise above the rice, below the deck)
+    # S2 foreground (v3): a grassy field bund runs diagonally away from the tripod; beyond it (right) the
+    # neighbouring plot is already harvested - rice stubble rows and straw stacks - like the staggered harvest of
+    # double-cropped Guangxi paddies; framing trees stand on the bunds at the frame edges
     sh2 = [s_ for s_ in SH.build_shots() if s_.name.startswith("S2")][0]
     a2 = np.asarray(sh2.aim_fn(0.0), float)
     bearing = math.atan2(a2[1] - c2[1], a2[0] - c2[0])
+    fwd = np.array([math.cos(bearing), math.sin(bearing)]); lft = np.array([-fwd[1], fwd[0]])
+    def to_xy(f_, l_):
+        return c2[0] + fwd[0] * f_ + lft[0] * l_, c2[1] + fwd[1] * f_ + lft[1] * l_
+    b0, b1 = np.array([6.0, -15.0]), np.array([36.0, 14.0])            # bund end points (forward, left) in metres
+    def side(X, Y):                                                    # signed distance to the bund line (+ = right/far)
+        f_ = (X - c2[0]) * fwd[0] + (Y - c2[1]) * fwd[1]; l_ = (X - c2[0]) * lft[0] + (Y - c2[1]) * lft[1]
+        d = b1 - b0; nrm = np.array([d[1], -d[0]]) / np.linalg.norm(d)
+        return (f_ - b0[0]) * nrm[0] + (l_ - b0[1]) * nrm[1]
+    W.scatter_rice(coll, src, c2, 42.0 if scale >= 1 else 25.0, PADDY_PATH[0], keep_fn=lambda X, Y: side(X, Y) < -0.6)
+    tt = np.linspace(0, 1, 40)
+    bx, by = to_xy(b0[0] + (b1[0] - b0[0]) * tt, b0[1] + (b1[1] - b0[1]) * tt)
+    from . import materials as M_
+    bund_m = M_.principled("FieldBund", (0.075, 0.08, 0.035), 0.0, 0.95)
+    W._ribbon("S2Bund", coll, np.asarray(bx), np.asarray(by), [(-0.65, -0.12), (-0.25, 0.30), (0.25, 0.30), (0.65, -0.12)],
+              bund_m, W.natural_ground)
+    gb = []
+    for k in range(900):
+        u = rng.random(); w_ = rng.uniform(-0.45, 0.45)
+        f_ = b0[0] + (b1[0] - b0[0]) * u; l_ = b0[1] + (b1[1] - b0[1]) * u
+        d = b1 - b0; nrm = np.array([d[1], -d[0]]) / np.linalg.norm(d)
+        x_, y_ = to_xy(f_ + nrm[0] * w_, l_ + nrm[1] * w_)
+        gb.append((x_, y_, float(W.natural_ground(np.array([x_]), np.array([y_]))[0]) + 0.28))
+    if grasses:
+        W.scatter_tree("VegS2Bund", coll, np.array(gb), grasses, (0.9, 1.5), 13, wind=0.08)
+    # harvested plot: stubble rows (short rice clumps) and straw stacks
+    clumps = [o for o in bpy.data.objects if o.name.startswith("Rice") and o.type == "MESH"][:4]
+    U, Vv = np.meshgrid(np.arange(-40, 40, 0.25), np.arange(-40, 40, 0.30))
+    SX, SY = c2[0] + U.ravel(), c2[1] + Vv.ravel()
+    sd = side(SX, SY); fdist = (SX - c2[0]) * fwd[0] + (SY - c2[1]) * fwd[1]
+    ks = (sd > 0.6) & (fdist > 2) & (np.hypot(SX - c2[0], SY - c2[1]) < 40) & (rng.random(len(SX)) < 0.55)
+    if clumps and ks.any():
+        SZ = W.natural_ground(SX[ks], SY[ks]) - 0.02
+        W.scatter_tree("VegS2Stubble", coll, np.column_stack([SX[ks], SY[ks], SZ]), clumps, (0.18, 0.26), 14, wind=0.0)
+    stacks = [bpy.data.objects[n] for n in ("StrawStack0", "StrawStack1", "StrawStack2") if n in bpy.data.objects]
+    if stacks:
+        sp = []
+        for f_, l_ in ((14.0, -8.0), (17.5, -11.5), (21.0, -6.5), (26.0, -13.0)):
+            x_, y_ = to_xy(f_, l_)
+            sp.append((x_, y_, float(W.natural_ground(np.array([x_]), np.array([y_]))[0]) - 0.05))
+        W.scatter_tree("PropS2Stacks", coll, np.array(sp), stacks, (0.95, 1.1), 15, wind=0.0)
     fp = []
-    for ang, dist in ((-33.0, 22.0), (-26.0, 34.0), (33.0, 24.0)):
+    for ang, dist in ((-33.0, 22.0), (-26.0, 34.0), (33.0, 24.0), (40.0, 13.0)):     # + a near tree on the left edge
         a = bearing + math.radians(ang)
         x, y = c2[0] + dist * math.cos(a), c2[1] + dist * math.sin(a)
         fp.append((x, y, float(W.natural_ground(np.array([x]), np.array([y]))[0])))

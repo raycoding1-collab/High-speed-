@@ -169,6 +169,59 @@ def time_warp(sh, x, n_screen):
     return np.interp(ts, np.arange(len(x)), x)
 
 
+def ramp_fx(sh, n, rng, peak):
+    """Cinema sound design locked to a shot's speed-ramp curve (screen time):
+    - ramp-in: a deep sub-bass pitch-down drop (58 -> 24 Hz sweep with a 30-90 Hz body) as time slows;
+    - slow-motion bed, scaled by the slow-motion depth: breathing airflow, a sparse crackle of leaves/grit
+      (environmental texture), and the ringing of the rails (pinned-pinned resonance 960 Hz with partials) plus
+      the traction motors' magnetic hum, all time-stretched (synthesised at true pitch, slow envelopes);
+    - snap-back: a 0.25 s reverse swell into a punchy click + kick, exactly where real time returns, after which
+      the full-speed Doppler rush of the warped track takes over."""
+    if not sh.ramp:
+        return np.zeros(n), np.ones(n)
+    tau = np.arange(n) / FS
+    a, b, lo = sh.ramp[:3]
+    r_in, r_out = (sh.ramp[3], sh.ramp[4]) if len(sh.ramp) > 3 else (0.35, 0.35)
+    sp = np.array([sh.speed(x) for x in sh.sim(tau[::48])])
+    sp = np.interp(tau, tau[::48], sp)
+    depth = np.clip((1.0 - sp) / (1.0 - lo), 0, 1)                        # 0 real time .. 1 slowest
+    t_in, t_out = sh.screen(a - r_in), sh.screen(b + r_out)
+    out = np.zeros(n)
+    # sub-bass drop
+    x = np.clip(tau - t_in, 0, None)
+    f = 24.0 + 34.0 * np.exp(-x / 0.35)
+    ph = 2 * np.pi * np.cumsum(f) / FS
+    env = np.where(tau >= t_in, (1 - np.exp(-x / 0.02)) * np.exp(-x / 0.9), 0.0)
+    body = signal.sosfilt(signal.butter(2, [30, 90], "band", fs=FS, output="sos"), rng.standard_normal(n))
+    out += env * (0.9 * np.sin(ph) + 0.35 * body / (np.std(body) + 1e-12)) * 10 ** (-3 / 20)
+    # slow-motion bed
+    air = signal.sosfilt(signal.butter(2, [200, 2500], "band", fs=FS, output="sos"), rng.standard_normal(n))
+    air = air / (np.std(air) + 1e-12) * (0.7 + 0.3 * np.sin(2 * np.pi * 0.7 * tau))
+    hiss = signal.sosfilt(signal.butter(2, [3000, 8000], "band", fs=FS, output="sos"), rng.standard_normal(n))
+    hiss /= np.std(hiss) + 1e-12
+    crk = np.zeros(n); idx = rng.choice(n, size=max(1, int(n / FS * 35)), replace=False)
+    crk[idx] = rng.uniform(-1, 1, len(idx))
+    crk = signal.lfilter([1.0], [1.0, -0.97], crk)
+    crk = signal.sosfilt(signal.butter(2, [2000, 6000], "band", fs=FS, output="sos"), crk)
+    crk /= np.std(crk) + 1e-12
+    ring = np.zeros(n)
+    for fc, amp in ((960.0, 1.0), (1930.0, 0.5), (3150.0, 0.25), (107.0, 0.6), (214.0, 0.35)):
+        ring += amp * np.sin(2 * np.pi * fc * tau * (1 + 0.002 * np.sin(2 * np.pi * 0.3 * tau)) + rng.uniform(0, 6))
+    ring /= np.std(ring) + 1e-12
+    bed = 0.55 * air + 0.12 * hiss + 0.25 * crk + 0.35 * ring
+    out += bed * depth * 10 ** (-13 / 20)
+    # snap back
+    y = tau - t_out
+    swell = np.where((y > -0.25) & (y < 0), ((y + 0.25) / 0.25) ** 3, 0.0)
+    sw = signal.sosfilt(signal.butter(2, [400, 9000], "band", fs=FS, output="sos"), rng.standard_normal(n))
+    out += swell * sw / (np.std(sw) + 1e-12) * 10 ** (-9 / 20)
+    click = np.where((y >= 0) & (y < 0.006), rng.uniform(-1, 1, n), 0.0)
+    kick = np.where(y >= 0, np.sin(2 * np.pi * 52 * np.clip(y, 0, None)) * np.exp(-np.clip(y, 0, None) / 0.12), 0.0)
+    out += (click * 0.8 + kick) * 10 ** (-2 / 20)
+    duck = 1.0 - 0.5 * depth                                             # let the detail layer read in slow motion
+    return out * peak, duck
+
+
 def interior_or_roof(sh, n, rng, pool):
     t = np.arange(n) / FS
     if sh.name.startswith("S5"):
@@ -340,6 +393,8 @@ def render(out_path, seed=5):
         if not sh.attach:
             tr = tr + near_track_layers(sh, n_sim, rng, 10 ** (SHOT_PEAK_DB[sh.name[:2]] / 20))
         tr = time_warp(sh, tr, n)
+        fx, duck = ramp_fx(sh, n, rng, 10 ** (SHOT_PEAK_DB[sh.name[:2]] / 20))
+        tr = tr * duck + fx
         amb = ambience(n, rng, "valley" if sh.name[:2] in ("S1", "S2", "S3", "S4") else "hill")
         amb = amb * 10 ** ((AMB_DB - _rms_db(amb)) / 20)
         if not sh.attach:

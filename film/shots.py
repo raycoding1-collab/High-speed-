@@ -42,10 +42,11 @@ class Shot:
         u = np.linspace(0.0, dur + 1.0, int((dur + 1.0) * 2000) + 1)
         v = np.ones_like(u)
         if ramp:
-            a, b, sp = ramp; r = 0.35
-            w = np.clip((u - (a - r)) / r, 0, 1) * np.clip(((b + r) - u) / r, 0, 1)
+            a, b, sp = ramp[:3]
+            r_in, r_out = (ramp[3], ramp[4]) if len(ramp) > 3 else (0.35, 0.35)
+            w = np.clip((u - (a - r_in)) / r_in, 0, 1) * np.clip(((b + r_out) - u) / r_out, 0, 1)
             w = 0.5 - 0.5 * np.cos(np.pi * w)
-            v = 1.0 - (1.0 - sp) * w
+            v = np.exp(np.log(sp) * w)          # speed eases exponentially: a snap into slow motion, not a slur
         tau = np.concatenate([[0.0], np.cumsum(0.5 * (1 / v[1:] + 1 / v[:-1]) * np.diff(u))])
         self._u, self._tau, self._v = u, tau, v
         self.dur = float(np.interp(dur, u, tau))
@@ -117,7 +118,7 @@ def build_shots():
     shots.append(Shot("S3_drone", 7.0, 1650 - 300, 24,
                       "Drone flying alongside at its 26 m/s maximum; the train overtakes at 85 m/s relative and leaves it behind",
                       lambda t: _rail(1650 + 26 * t, -24, 12),
-                      None, fstop=4.0, ramp=(3.1, 4.3, 0.4)))     # the overtake at 40 %
+                      None, fstop=4.0))
     # S4 helicopter chase at 70 m/s (AS350 cruise), 160 m off and only 7 m above the deck, 135 mm on a gimbal:
     # a long-lens panning shot whose background is the far side of the valley (hamlets, groves, orchards, the
     # karst towers) streaking past, like real helicopter footage of high-speed trains
@@ -134,15 +135,22 @@ def build_shots():
     # S6 roof camera looking back at the raised pantograph on car 6
     shots.append(Shot("S6_panto", 5.0, 2250.0, 30,
                       "Roof-mounted camera on car 6 looking back at the raised pantograph; contact point slides +-300 mm",
-                      None, None, attach=("Car6", (9.5, -1.15, 4.75)), fstop=8, shake=0.002,
-                      ramp=(1.4, 3.0, 0.5)))                      # contact wire zig-zag and uplift at 50 %
-    # S7 low trackside in the cutting
+                      None, None, attach=("Car6", (9.5, -1.15, 4.75)), fstop=8, shake=0.002))
+    # S7 low trackside in the cutting. Showstopper: the robotic head whip-pans with the nose (~270 deg/s, from the
+    # up-line view to abeam of the bodyside) exactly as the camera snaps into 240 fps; 0.26 s of real time fill 2.6 s
+    def _s7_aim(t, c=_rail(4150, 6.4, 0.30)):
+        # the pan is an angular move of the head (bounded rate, <= ~340 deg/s at the peak), not a target chase
+        d0 = _rail(4150 - 60, A.track_offset(), 1.6) - c; d0 /= np.linalg.norm(d0)
+        d1 = _rail(4150 + 12.0, A.track_offset(), 1.7) - c; d1 /= np.linalg.norm(d1)
+        w = min(max((t - 2.48) / 0.54, 0.0), 1.0); w = w * w * (3 - 2 * w)
+        om = math.acos(float(np.clip(d0 @ d1, -1, 1)))
+        d = (math.sin((1 - w) * om) * d0 + math.sin(w * om) * d1) / math.sin(om)
+        return c + d * 10.0
     c7 = _rail(4150, 6.4, 0.30)        # low remote camera beside the cess, 0.3 m above rail-head height
     shots.append(Shot("S7_cutting_low", 6.0, 4150 - V * 2.7 + 0.0, 20,
                       "Remote low camera in the cess ditch, 3.0 m from the nearest rail, 2.0 m from the car body; pass-by then wake",
-                      lambda t, c=c7: c,
-                      lambda t: _rail(4150 - 60, A.track_offset(), 1.6), fstop=2.8, jolt=True,
-                      ramp=(2.55, 3.30, 0.25)))           # nose pass at 25 % (a 96 fps high-speed camera)
+                      lambda t, c=c7: c, _s7_aim, fstop=2.8, jolt=True,
+                      ramp=(2.64, 2.90, 0.10, 0.12, 0.18)))   # SHOWSTOPPER 1: 240 fps (10 %) as the nose passes
     # S8 long lens head-on from the hill above the cutting
     c8 = _rail(3905, 72.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 7.0      # north rim of the cutting (on a camera tower), sun behind the lens
     shots.append(Shot("S8_tele", 9.0, 2650.0, 600,
@@ -150,10 +158,24 @@ def build_shots():
                       lambda t, c=c8: c, lambda t, sh=None: _rail(2650 + V * t - 40, A.track_offset(), 2.2), fstop=8))
     # S9 tunnel portal
     c9 = _rail(A.TUNNEL_S + 9.0, 4.0, 0); c9[2] = _ground_at(c9[0], c9[1]) + 1.7   # on the hill right above the portal
+    # Showstopper: a cable-cam over the portal pushes in (8 m forward, 2.5 m down at up to 9 m/s) and tilts down to
+    # the nose as it dives into the mountain beneath the lens, snapping into 200 fps
+    p9 = _rail(A.TUNNEL_S + 1.0, 4.0, 0); p9[2] = c9[2] - 2.5
+    def _push(t):
+        w = min(max((t - 1.55) / 1.15, 0.0), 1.0)
+        return w * w * (3 - 2 * w)
+    def _s9_cam(t, c=c9, p=p9):
+        return c + (p - c) * _push(t)
+    def _s9_aim(t):
+        base = _rail(4330, A.track_offset(), 1.0)
+        s_nose = 4450 - V * 2.6 + V * t
+        nose = _rail(min(s_nose - 3.0, A.TUNNEL_S - 2.0), A.track_offset(), 1.8)
+        w = min(max((t - 1.9) / 0.75, 0.0), 1.0); w = w * w * (3 - 2 * w)
+        return base * (1 - w) + nose * w
     shots.append(Shot("S9_portal", 6.5, 4450 - V * 2.6, 24,
                       "On the hill above the portal looking down the cutting: the train races at the lens and dives into the mountain beneath it; cut 2 s after the tail is in",
-                      lambda t, c=c9: c, lambda t: _rail(4330, A.track_offset(), 1.0), fstop=8,
-                      ramp=(2.35, 3.00, 0.4)))            # the nose dives into the portal at 40 %
+                      _s9_cam, _s9_aim, fstop=8,
+                      ramp=(2.50, 2.78, 0.12, 0.12, 0.20)))   # SHOWSTOPPER 2: 200 fps (12 %) as the nose dives in
     return shots
 
 
