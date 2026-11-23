@@ -515,7 +515,15 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         near_h |= np.hypot(vp[:, 0] - hx_, vp[:, 1] - hy_) < 90.0
     is_bamboo = (river_d < 45.0) | (near_h & (rng.random(len(vp)) < 0.45))
     log("  valley trees (crown clumps)", int((~is_bamboo).sum()), "bamboo clumps", int(is_bamboo.sum()))
-    W.scatter_tree("VegValleyCopses", coll, vp[~is_bamboo], crowns, (2.2, 5.5), 6, wind=0.0)
+    # trees the S1 drone flies over (within 230 m of its path) are real broadleaf models, not crown proxies
+    s1 = [x for x in SH.build_shots() if x.name.startswith("S1")][0]
+    path = np.array([np.asarray(s1.cam_fn(t))[:2] for t in np.linspace(0, s1.sim_dur, 30)])
+    d1 = np.min(np.hypot(vp[:, 0, None] - path[None, :, 0], vp[:, 1, None] - path[None, :, 1]), axis=1)
+    near1 = (d1 < 230.0) & ~is_bamboo
+    if "tree4" in models and near1.any():
+        W.scatter_tree("VegValleyNearS1", coll, vp[near1], [models["tree4"]], (1.3, 1.9), 16, wind=0.03)
+    log("  real broadleaf trees under the S1 drone", int(near1.sum()))
+    W.scatter_tree("VegValleyCopses", coll, vp[~is_bamboo & ~near1], crowns, (2.2, 5.5), 6, wind=0.0)
     W.scatter_tree("VegValleyBamboo", coll, vp[is_bamboo], bamboo, (3.2, 4.6), 7, wind=0.0)
     # the hill massif around the cutting: forest its broad flanks (seen from the cab and the long lens) where
     # the real-tree corridor strip ends; keep 150 m from the low cameras that look at it close up
@@ -587,7 +595,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     if clumps and ks.any():
         SZ = W.natural_ground(SX[ks], SY[ks]) - 0.02
         W.scatter_tree("VegS2Stubble", coll, np.column_stack([SX[ks], SY[ks], SZ]), clumps, (0.18, 0.26), 14, wind=0.0)
-    stacks = [bpy.data.objects[n] for n in ("StrawStack0", "StrawStack1", "StrawStack2") if n in bpy.data.objects]
+    stacks = []          # (the smooth-cone straw stacks read as tents this close to the lens: not used in S2)
     if stacks:
         sp = []
         for f_, l_ in ((14.0, -8.0), (17.5, -11.5), (21.0, -6.5), (26.0, -13.0)):
