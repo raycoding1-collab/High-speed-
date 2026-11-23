@@ -132,16 +132,23 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Extra swap (memory headroom for the big v3 scene)
         run: |
-          sudo fallocate -l 10G /swapextra && sudo chmod 600 /swapextra && sudo mkswap /swapextra && sudo swapon /swapextra || true
-          free -g
+          # on the big temporary disk (/mnt, ~70 GB): a 10 GB file on / (~14 GB free) left no room and runners died without logs
+          sudo fallocate -l 16G /mnt/swapextra && sudo chmod 600 /mnt/swapextra && sudo mkswap /mnt/swapextra && sudo swapon /mnt/swapextra || true
+          free -g; df -h / /mnt
       - name: Render interleaved frames
         run: |
           nproc; lscpu | grep -E "Model name|^CPU\(s\)" || true
           FR="${{ inputs.frames }}"
           ARGS=""
           if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
+          set +e
+          ( while true; do echo "[mon] $(date -u +%T) mem $(free -m | awk '/Mem:/{print $3"/"$2" MB"}') swap $(free -m | awk '/Swap:/{print $3"/"$2" MB"}') disk / $(df -h / | awk 'NR==2{print $4" free"}') /mnt $(df -h /mnt | awk 'NR==2{print $4" free"}')"; sleep 120; done ) &
+          MON=$!
           python tools/render_frames.py --blend build/scene.blend --out frames --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} \
-            --deadline-min 335 --timing frames/timing_${{ matrix.job }}.json --fresh --batch 3 $ARGS
+            --deadline-min 335 --timing frames/timing_${{ matrix.job }}.json --fresh --batch 1 $ARGS
+          RC=$?
+          kill $MON 2>/dev/null
+          exit $RC
       - name: Timing summary
         if: always()
         run: |
