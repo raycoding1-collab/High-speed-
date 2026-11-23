@@ -788,9 +788,11 @@ def sample_surface(obj_list, density, rng, filt=None, max_n=200000, tri_filter=N
 
 
 # ------------------------------------------------------------------ sky / sun / haze
-def build_sky(scene, hdri_path, sun_azimuth_deg=262.0, exposure=0.0, strength=0.70):
-    """HDRI sky rotated so its (clipped) sun lies at the requested azimuth, plus a matched warm sun lamp."""
-    HDRI_SUN_U, HDRI_SUN_ELEV = 0.612, 4.64
+def build_sky(scene, hdri_path, sun_azimuth_deg=262.0, exposure=0.0, strength=0.70, hdri_sun=(0.612, 4.64),
+              sun_color=(1.0, 0.60, 0.33), sun_energy=13.0):
+    """HDRI sky rotated so its (clipped) sun lies at the requested azimuth, plus a matched warm sun lamp.
+    hdri_sun = (u of the sun disc in the equirect image, its elevation in degrees), measured from the image."""
+    HDRI_SUN_U, HDRI_SUN_ELEV = hdri_sun
     phi0 = (HDRI_SUN_U - 0.5) * 2 * math.pi
     d0 = np.array([math.cos(phi0), -math.sin(phi0)])            # Blender equirect: u = -atan2(y, x)/2pi + 0.5
     az0 = math.degrees(math.atan2(d0[0], d0[1])) % 360          # azimuth from north (clockwise)
@@ -814,11 +816,11 @@ def build_sky(scene, hdri_path, sun_azimuth_deg=262.0, exposure=0.0, strength=0.
     L(comb.outputs[0], bg.inputs[0])
     out = nt.nodes.new("ShaderNodeOutputWorld"); L(bg.outputs[0], out.inputs[0])
     # sun lamp
-    el = math.radians(HDRI_SUN_ELEV + 1.0)
+    el = math.radians(HDRI_SUN_ELEV + (1.0 if HDRI_SUN_ELEV < 10 else 0.0))
     az = math.radians(sun_azimuth_deg)
     sun_dir = np.array([math.sin(az) * math.cos(el), math.cos(az) * math.cos(el), math.sin(el)])
-    ld = bpy.data.lights.new("Sun", "SUN"); ld.energy = 13.0; ld.angle = math.radians(0.55)
-    ld.color = (1.0, 0.60, 0.33)
+    ld = bpy.data.lights.new("Sun", "SUN"); ld.energy = sun_energy; ld.angle = math.radians(0.55)
+    ld.color = sun_color
     sun = bpy.data.objects.new("Sun", ld); scene.collection.objects.link(sun)
     from mathutils import Vector
     sun.rotation_mode = "QUATERNION"

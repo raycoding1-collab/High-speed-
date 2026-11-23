@@ -142,7 +142,7 @@ def _fcurves(action):
 
 
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
-SHOT_EXPOSURE = {"S7": 1.0, "S9": 1.2, "SX": 1.1}
+SHOT_EXPOSURE = {"S7": 0.5, "S9": 0.6, "SX": 0.3}
 
 
 def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
@@ -171,7 +171,7 @@ def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
 
 # camera white balance per shot, like a DP setting the camera for the light it shoots in: the cutting shots lie
 # in shade lit by the blue morning sky (~8000 K), so they are balanced for shade instead of rendering cold navy
-SHOT_WB = {"S7": 7600.0, "S9": 8000.0, "SX": 7800.0}
+SHOT_WB = {"S7": 7000.0, "S9": 7000.0, "SX": 6800.0}
 
 
 def key_shot_exposure(scene, shots):
@@ -274,7 +274,8 @@ def _train_aim(sh, t):
         w = np.clip((sh.s_head(t) - (1650 + 26 * t) + 60) / 120, 0, 1)
         return ahead * (1 - w) + nose * w
     if sh.name.startswith("S4"):
-        return A.frame(np.array([sh.s_head(t) - 14.0]), off)[0][0] + np.array([0, 0, 2.0])   # gimbal locked on the nose
+        along = 105 - 13 * t                                  # operator keeps the front half framed as it draws ahead
+        return A.frame(np.array([sh.s_head(t) - along]), off)[0][0] + np.array([0, 0, 2.0])
     return A.frame(np.array([sh.s_head(t)]), off)[0][0]
 
 
@@ -298,8 +299,12 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     tex = tex_paths(assets)
 
     log("sky + haze")
-    # golden-hour MORNING: sun low in the ENE -> valley radiation fog, backlit mist in the eastbound shots
-    sun, sun_dir = W.build_sky(sc, os.path.join(assets, "hdri", "kloppenheim_06_puresky_8k.hdr"), sun_azimuth_deg=72.0)
+    # v3: late-afternoon golden light, sun 19 deg high in the WSW (measured from the HDRI: u 0.6004, 19.1 deg),
+    # turned so it shines straight down the cutting onto the portal and lights the eastbound views from behind.
+    # (v1/v2 used a 4.6 deg sunrise: the cutting, portal and finale sat in deep blue shade.)
+    sun, sun_dir = W.build_sky(sc, os.path.join(assets, "hdri", "qwantani_late_afternoon_puresky_8k.hdr"),
+                               sun_azimuth_deg=260.3, hdri_sun=(0.6004, 19.09), sun_color=(1.0, 0.80, 0.58),
+                               sun_energy=7.0)
     cw = bl.collection("World")
     from . import post
     post.setup(sc, haze_on=False)                         # bloom + grade only; atmosphere is analytic fog in the shaders
@@ -364,7 +369,8 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
         except Exception:
             pass
     from . import fog
-    log("atmospheric fog in", fog.apply(sc, sun_dir, s_mist=0.0009, s_haze=0.00006), "materials")   # v3: clearer mid-distance
+    log("atmospheric fog in", fog.apply(sc, sun_dir, s_mist=0.0004, s_haze=0.00006, sun_col=(1.0, 0.82, 0.60)),
+        "materials")   # v3: afternoon - thin ground haze, clearer mid-distance
     sc.render.film_transparent = False
     bpy.ops.file.make_paths_relative() if False else None
     if pack:

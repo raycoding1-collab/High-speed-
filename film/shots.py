@@ -124,9 +124,9 @@ def build_shots():
     # karst towers) streaking past, like real helicopter footage of high-speed trains
     # (v3) it flies ahead of the train on the north side and looks back, so the low morning sun is behind the lens
     # (sun 120-175 deg from the view direction): the nose is front-lit while it closes from 440 m to 160 m
-    shots.append(Shot("S4_heli", 9.0, 1560.0, 135,
-                      "Helicopter at 70 m/s (252 km/h) ahead of the train just above deck height, looking back: the 400 km/h train closes in from 440 m",
-                      lambda t: _rail(1960 + 70 * t, 160, 7),
+    shots.append(Shot("S4_heli", 9.0, 2080.0, 135,
+                      "Helicopter at 70 m/s (252 km/h) beside the line just above deck height, the low sun behind it: the 400 km/h train draws ahead",
+                      lambda t: _rail(2080 - 120 + 70 * t, -160, 7),
                       None, fstop=5.6, shake=0.08))
     # S5 cab view
     shots.append(Shot("S5_cab", 8.0, 2955.0, 24,

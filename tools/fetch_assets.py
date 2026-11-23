@@ -15,7 +15,7 @@ import urllib.request
 API = "https://api.polyhaven.com/files/"
 UA = {"User-Agent": "train-film-build/1.0"}
 
-HDRIS = [("kloppenheim_06_puresky", "8k"), ("evening_road_01_puresky", "4k")]
+HDRIS = [("kloppenheim_06_puresky", "8k"), ("evening_road_01_puresky", "4k"), ("qwantani_late_afternoon_puresky", "8k")]
 TEXTURES = [  # (id, res, maps)
     ("concrete_wall_008", "2k", ["Diffuse", "Rough", "nor_gl"]),
     ("precast_concrete_wall", "2k", ["Diffuse", "Rough", "nor_gl"]),
