@@ -142,7 +142,7 @@ def _fcurves(action):
 
 
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
-SHOT_EXPOSURE = {"S6": -1.6, "S7": 0.5, "S9": 0.1, "SX": 0.3}   # S9: fully sunlit top-down view (+0.6 bleached the grass to sand)
+SHOT_EXPOSURE = {"S5": 0.3, "S6": -1.6, "S7": 0.5, "S9": 0.1, "SX": 0.7}   # v3 look pass: S5 console crush, SX readable ending   # S9: fully sunlit top-down view (+0.6 bleached the grass to sand)
 
 
 def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
