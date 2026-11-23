@@ -37,7 +37,9 @@ TEXTURES = [  # (id, res, maps)
 ]
 MODELS = [("island_tree_01", "1k"), ("island_tree_02", "1k"), ("island_tree_03", "1k"), ("tree_small_02", "1k"),
           ("shrub_01", "1k"), ("shrub_02", "1k"), ("shrub_04", "1k"), ("fern_02", "1k"), ("grass_medium_01", "1k"),
-          ("grass_medium_02", "1k"), ("weed_plant_02", "1k"), ("boulder_01", "1k")]
+          ("grass_medium_02", "1k"), ("weed_plant_02", "1k"), ("boulder_01", "1k"),
+          # v3: Guangxi species near the cameras: Masson pine and Chinese fir on the hills, broadleaf in the groves
+          ("pine_tree_01", "1k"), ("fir_tree_01", "1k"), ("jacaranda_tree", "1k")]
 
 
 def get_json(url):

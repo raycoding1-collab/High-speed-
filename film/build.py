@@ -414,10 +414,14 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         "fern": ("fern_02", "fern_02_b", 0.7), "grass1": ("grass_medium_01", "grass_medium_01_large_a_LOD0", 0.45),
         "grass2": ("grass_medium_02", "grass_medium_02_d", 0.5), "grass3": ("grass_medium_01", "grass_medium_01_tall_a_LOD0", 0.55),
         "weed": ("weed_plant_02", "weed_plant_02_a_LOD0", 0.5),
+        # v3: Masson pine and Chinese fir, the plantation conifers of the Guangxi hills, for the slopes near cameras
+        "pine": ("pine_tree_01", "pine_tree_01_a_LOD2", 15.0), "fir": ("fir_tree_01", "fir_tree_01_a_LOD1", 14.0),
     })
     for k, o in models.items():
         log("  model", k, o.name, len(o.data.polygons))
     trees = [models[k] for k in ("tree1", "tree2", "tree3", "tree4") if k in models]
+    conifers = [models[k] for k in ("pine", "fir") if k in models]
+    hill_species = (conifers * 3 + trees[3:4]) if conifers else trees            # 3:3:1 pine : fir : broadleaf
     shrubs = [models[k] for k in ("shrub1", "shrub2", "shrub4", "fern") if k in models]
     grasses = [models[k] for k in ("grass1", "grass2", "grass3", "weed") if k in models]
     # crowns (mid-field)
@@ -444,7 +448,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         return f
     pts = W.sample_surface([strip], 0.035 * scale, rng, slope_near(3700, 4700, 30), max_n=40000)
     log("  hill trees", len(pts))
-    W.scatter_tree("VegHillTrees", coll, pts, trees, (0.7, 1.25), 2, wind=0.03)
+    W.scatter_tree("VegHillTrees", coll, pts, hill_species, (0.6, 1.1), 2, wind=0.03)
     pts = W.sample_surface([strip], 0.30 * scale, rng, slope_near(3750, 4600, 8.5), max_n=90000)
     W.scatter_tree("VegHillShrubs", coll, pts, shrubs, (0.7, 1.5), 3, wind=0.06)
     def cut_grass(p, n):
@@ -531,8 +535,15 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         return (W.natural_ground(c[:, 0], c[:, 1]) > 7.0) & (d < 1600.0)
     pts = W.sample_surface([far], 0.02 * scale, rng, massif, max_n=160000, tri_filter=massif_tris)
     pts = pts[clear_of_props(pts)] if len(pts) else pts
-    log("  massif crowns", len(pts))
-    W.scatter_tree("VegMassif", coll, pts, crowns, (2.6, 5.8), 8, wind=0.0)
+    # real conifers where the cameras are close (within 500 m of the cutting / portal: cab, trackside, 600 mm,
+    # portal), simplified crowns beyond
+    cx_, cy_ = A.xy(np.arange(3600.0, A.TUNNEL_S + 60, 40.0))
+    dmin = np.min(np.hypot(pts[:, 0, None] - cx_[None, :], pts[:, 1, None] - cy_[None, :]), axis=1) if len(pts) else np.zeros(0)
+    near = dmin < 500.0
+    log("  massif crowns", int((~near).sum()), "real conifers near the cameras", int(near.sum()))
+    W.scatter_tree("VegMassif", coll, pts[~near], crowns, (2.6, 5.8), 8, wind=0.0)
+    if conifers and near.any():
+        W.scatter_tree("VegMassifConifers", coll, pts[near], hill_species, (0.6, 1.15), 9, wind=0.0)
     # grass + weeds right around the S2 camera (paddy edge)
     c2 = [s for s in SH.build_shots() if s.name.startswith("S2")][0].cam_fn(0)
     def near_c2(p, n):
