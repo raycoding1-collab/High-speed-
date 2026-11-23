@@ -310,9 +310,11 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     # v3: late-afternoon golden light, sun 19 deg high in the WSW (measured from the HDRI: u 0.6004, 19.1 deg),
     # turned so it shines straight down the cutting onto the portal and lights the eastbound views from behind.
     # (v1/v2 used a 4.6 deg sunrise: the cutting, portal and finale sat in deep blue shade.)
-    sun, sun_dir = W.build_sky(sc, os.path.join(assets, "hdri", "qwantani_late_afternoon_puresky_8k.hdr"),
-                               sun_azimuth_deg=260.3, hdri_sun=(0.6004, 19.09), sun_color=(1.0, 0.80, 0.58),
-                               sun_energy=7.0)
+    # (v3) cumulus sky (table_mountain_2, sun measured at 8k: u 0.6383, 7.3 deg) instead of the cloudless puresky:
+    # the flat blue sky made every wide shot read synthetic. Low golden-hour sun, warmer and weaker (air mass).
+    sun, sun_dir = W.build_sky(sc, os.path.join(assets, "hdri", "table_mountain_2_puresky_8k.hdr"),
+                               sun_azimuth_deg=260.3, hdri_sun=(0.6383, 7.27), sun_color=(1.0, 0.74, 0.50),
+                               sun_energy=6.0)
     cw = bl.collection("World")
     from . import post
     post.setup(sc, haze_on=False)                         # bloom + grade only; atmosphere is analytic fog in the shaders
@@ -483,6 +485,11 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     })
     for k, o in models.items():
         log("  model", k, o.name, len(o.data.polygons))
+    # (v3) November in Guangxi: a share of the broadleaf trees has turned (sweetgum red, tallow orange, ginkgo yellow)
+    for k in ("tree1", "tree2", "tree3", "tree4"):
+        for sl in (models[k].material_slots if k in models else []):
+            if sl.material is not None and "lea" in sl.material.name.lower() and W.autumn_tint(sl.material):
+                log("  autumn tint", sl.material.name)
     # (v3) the pine_tree_01 needle cards are 93 % grey-brown (an autumn/dry pine): at 1-3 km the pine half of the
     # conifer forest read as a grey gravel heap. Masson pine / Chinese fir in Guangxi are mid green.
     for k, hue, sat in (("pine", 0.5 + 45 / 360, 1.6), ("fir", 0.5 + 12 / 360, 1.1)):
@@ -627,7 +634,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     path = []
     for sh_ in SH.build_shots():
         if sh_.name[:2] in ("S1", "S3", "S4") and sh_.cam_fn is not None:
-            reach = 230.0 if sh_.name.startswith("S1") else 650.0
+            reach = 380.0 if sh_.name.startswith("S1") else 850.0      # v3: real trees further out (proxies read CG)
             for t in np.linspace(0, sh_.sim_dur, 30):
                 c_ = np.asarray(sh_.cam_fn(t)); path.append((c_[0], c_[1], reach))
     path = np.array(path)

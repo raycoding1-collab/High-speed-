@@ -659,6 +659,32 @@ def _scatter_tree():
     return ng
 
 
+def autumn_tint(mat, start=0.78):
+    """(v3) Per-instance autumn colour for an image-textured leaf material: a share (1 - start) of the instances
+    (Object Info > Random) turn ginkgo-yellow / tallow-orange / sweetgum-red by a hue shift of their own leaf
+    texture, the rest stay evergreen. Inserted on the leaf colour link (Principled Base Color or a group's Diffuse)."""
+    nt = mat.node_tree; L = nt.links.new
+    tgt = [l for l in nt.links if (l.to_node.type == "BSDF_PRINCIPLED" and l.to_socket.name == "Base Color")
+           or (l.to_node.type == "GROUP" and l.to_socket.name in ("Diffuse", "Base Color", "Color"))]
+    if not tgt:
+        return False
+    oi = nt.nodes.new("ShaderNodeObjectInfo")
+    def ramp(vals):
+        r = nt.nodes.new("ShaderNodeValToRGB"); r.color_ramp.interpolation = "CONSTANT"; e = r.color_ramp.elements
+        e[0].position = 0.0; e[0].color = (vals[0],) * 3 + (1,); e[1].position = start; e[1].color = (vals[1],) * 3 + (1,)
+        a = e.new(start + (1 - start) * 0.38); a.color = (vals[2],) * 3 + (1,)
+        b = e.new(start + (1 - start) * 0.70); b.color = (vals[3],) * 3 + (1,)
+        L(oi.outputs["Random"], r.inputs[0]); return r.outputs["Color"]
+    hue = ramp((0.5, 0.5 - 48 / 360, 0.5 - 66 / 360, 0.5 - 84 / 360))
+    sat = ramp((1.0, 1.25, 1.35, 1.4)); val = ramp((1.0, 1.12, 1.05, 0.92))
+    for l in tgt:
+        hs = nt.nodes.new("ShaderNodeHueSaturation")
+        L(hue, hs.inputs["Hue"]); L(sat, hs.inputs["Saturation"]); L(val, hs.inputs["Value"])
+        src, dst = l.from_socket, l.to_socket
+        L(src, hs.inputs["Color"]); L(hs.outputs["Color"], dst)
+    return True
+
+
 def _leaf_material(name, c0, c1, vor_scale, bump, sss):
     m = bpy.data.materials.get(name)
     if m is not None:
@@ -676,10 +702,11 @@ def _leaf_material(name, c0, c1, vor_scale, bump, sss):
     e = tint.color_ramp.elements
     e[0].position = 0.0; e[0].color = (0.80, 0.92, 0.75, 1); e[1].position = 1.0; e[1].color = (1.22, 1.08, 0.80, 1)
     mid = e.new(0.5); mid.color = (1.0, 1.0, 1.0, 1)
-    if name == "CrownLeaves":            # late October: a few Chinese tallow / early-turning trees among the greens
-        e[1].position = 0.93
-        t1 = e.new(0.935); t1.color = (3.2, 1.6, 0.55, 1)            # amber-yellow
-        t2 = e.new(0.97); t2.color = (4.0, 0.9, 0.35, 1)             # tallow red
+    if name == "CrownLeaves":            # November round Guilin: sweetgum / tallow / ginkgo turning among the evergreens
+        e[1].position = 0.80                                         # (v3: ~20 % turned, was 7 % and read as all-green)
+        t1 = e.new(0.805); t1.color = (3.0, 1.7, 0.55, 1)            # ginkgo / amber-yellow
+        t2 = e.new(0.87); t2.color = (3.8, 1.15, 0.40, 1)            # tallow orange
+        t3 = e.new(0.93); t3.color = (4.2, 0.70, 0.30, 1)            # sweetgum red
     L(oi.outputs["Random"], tint.inputs[0])
     mul = nt.nodes.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs["Factor"].default_value = 1.0
     L(cr.outputs[0], mul.inputs["A"]); L(tint.outputs[0], mul.inputs["B"]); L(mul.outputs["Result"], p.inputs["Base Color"])
