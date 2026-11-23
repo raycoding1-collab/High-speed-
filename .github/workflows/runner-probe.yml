@@ -1,0 +1,19 @@
+name: runner-probe
+
+# Diagnostic: does a GitHub-hosted runner of the given image get assigned? (render jobs sat queued for >1 h)
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: "runner image label"
+        default: "ubuntu-22.04"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ${{ inputs.image }}
+    timeout-minutes: 5
+    steps:
+      - run: echo "runner assigned at $(date -u) on ${{ inputs.image }}"; nproc; free -g
