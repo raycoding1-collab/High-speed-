@@ -549,6 +549,23 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         pts = np.concatenate([pts, p7])
     log("  + dense grass at the S7 camera", len(p7))
     W.scatter_tree("VegCuttingGrass", coll, pts, grasses, (0.8, 1.6), 4, wind=0.10)
+    # (v3) the slope over the portal fills ~40 % of the closing frame: revegetated with dense shrubs, ferns and grass
+    # (the capped corridor-wide scatters left it a smooth green plane). Only the part the SX/S7 cameras see.
+    c9s = [np.asarray(sh.cam_fn(t), float) for sh in SH.build_shots() if sh.name.startswith("S9") for t in (0.0, sh.sim_dur)]
+    def portal_face(p, n):
+        s_, lat_ = A.nearest_s(p[:, 0], p[:, 1])
+        k = (s_ > A.TUNNEL_S - 6.0) & (s_ < A.TUNNEL_S + 95.0) & (np.abs(lat_) < 75.0) & (p[:, 2] > A.RAIL_Z + 9.0)
+        k &= n[:, 2] > 0.42
+        for c in c9s:
+            k &= np.hypot(p[:, 0] - c[0], p[:, 1] - c[1]) > 20.0
+        return k
+    pf_tris = lambda c: ((A.nearest_s(c[:, 0], c[:, 1])[0] > A.TUNNEL_S - 8.0)
+                         & (A.nearest_s(c[:, 0], c[:, 1])[0] < A.TUNNEL_S + 97.0))
+    pts = W.sample_surface([strip], 0.9 * scale, rng, portal_face, max_n=14000, tri_filter=pf_tris)
+    W.scatter_tree("VegPortalShrubs", coll, pts, shrubs, (0.8, 1.7), 18, wind=0.06)
+    pg = W.sample_surface([strip], 2.2 * scale, rng, portal_face, max_n=30000, tri_filter=pf_tris)
+    W.scatter_tree("VegPortalGrass", coll, pg, grasses, (1.0, 1.8), 19, wind=0.10)
+    log("  portal face shrubs", len(pts), "grass", len(pg))
     # valley floor: dense green tree clumps (copses, river lines, hamlet groves) and a few lone trees, like real
     # southern-Chinese farmland. (Evenly scattered single Poly Haven "island" trees read as savanna, so not used here.)
     vp = W.valley_tree_points(rng, W.hamlet_sites(), scale)
