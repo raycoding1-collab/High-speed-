@@ -187,7 +187,7 @@ def key_shot_exposure(scene, shots):
         for f in range(f0, f1 + 1):
             t = sh.sim((f - f0) / SH.FPS)
             w = min(max((t - 2.55) / 0.35, 0.0), 1.0); w = w * w * (3 - 2 * w)
-            scene.view_settings.exposure = SHOT_EXPOSURE["S7"] + 1.3 * w
+            scene.view_settings.exposure = SHOT_EXPOSURE["S7"] + 1.5 * w
             scene.view_settings.keyframe_insert("exposure", frame=f)
     # the finale fades to black over its last 1.25 s (per-frame keys, so CONSTANT interpolation is fine)
     sx = [(sh, f0, f1) for sh, f0, f1 in SH.timeline(shots) if sh.name.startswith("SX")]

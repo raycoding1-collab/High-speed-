@@ -124,6 +124,12 @@ def formation(s, lat, g):
     # ditches at the cutting toe
     ditch = (al > half - 1.2) & (al < half - 0.3) & (g > form_z)
     target = np.where(ditch, target - 0.5, target)
+    # (v3) the slope over the portal is uneven (settled fill, erosion rills), not a planar 220 m sheet: low-amplitude
+    # relief well above the lattice / portal hood (z > rail + 18) so nothing built sits on it
+    bump = (np.sin(0.23 * s + 1.3 * np.sin(0.05 * lat)) * np.sin(0.31 * lat + 0.7) + 0.6 * np.sin(0.71 * s - 0.53 * lat + 2.0)
+            + 0.35 * np.sin(1.9 * s + 1.4 * lat))
+    rel = np.clip((target - (A.RAIL_Z + 18.0)) / 10.0, 0, 1) * (face > 0) * (target < g - 0.5)
+    target = target + 0.55 * bump * rel
     w = np.clip((s - (A.VIADUCT[1] - 20)) / 30, 0, 1) * np.clip((A.TUNNEL_S + 260 - s) / 40, 0, 1)
     w = w * np.clip((160.0 - al) / 25.0, 0, 1)      # meet the far terrain exactly at the strip edge (was a 28 m step)
     out = np.where(on, g * (1 - w) + target * w, g)
@@ -348,6 +354,14 @@ def terrain_material(tex, paddy_img):
     cz = nt.nodes.new("ShaderNodeAttribute"); cz.attribute_name = "cutzone"
     hydro = nt.nodes.new("ShaderNodeMix"); hydro.data_type = "RGBA"; hydro.blend_type = "MULTIPLY"; hydro.inputs["Factor"].default_value = 1.0
     hydro.inputs["B"].default_value = (0.36, 0.56, 0.17, 1)                   # hydroseeded slope grass (v3: no pale scar in the sun)
+    # (v3) patchy growth: 5-30 m patches of thinner/yellower and denser/darker grass, not one flat colour
+    hn = nt.nodes.new("ShaderNodeTexNoise"); hn.inputs["Scale"].default_value = 0.06; hn.inputs["Detail"].default_value = 6
+    hn.inputs["Roughness"].default_value = 0.62; L(geo.outputs["Position"], hn.inputs["Vector"])
+    hr = nt.nodes.new("ShaderNodeValToRGB"); L(hn.outputs["Fac"], hr.inputs["Fac"])
+    hr.color_ramp.elements[0].position = 0.32; hr.color_ramp.elements[0].color = (0.25, 0.42, 0.12, 1)
+    hr.color_ramp.elements[1].position = 0.70; hr.color_ramp.elements[1].color = (0.46, 0.55, 0.20, 1)
+    hm = hr.color_ramp.elements.new(0.50); hm.color = (0.36, 0.56, 0.17, 1)
+    L(hr.outputs["Color"], hydro.inputs["B"])
     L(gbw.outputs[0], hydro.inputs["A"])
     cutgrass = nt.nodes.new("ShaderNodeMix"); cutgrass.data_type = "RGBA"; L(cz.outputs["Fac"], cutgrass.inputs["Factor"])
     L(allc.outputs["Result"], cutgrass.inputs["A"]); L(hydro.outputs["Result"], cutgrass.inputs["B"])
