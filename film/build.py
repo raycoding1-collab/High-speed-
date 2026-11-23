@@ -142,6 +142,9 @@ def _fcurves(action):
 
 
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
+SKY_SUN = (0.6383, 7.27)                       # table_mountain_2_puresky: sun disc u, elevation (measured at 8k)
+# per-shot sun azimuth (compass deg): view azimuth -/+ 35-55 deg -> three-quarter back light (others: 260.3)
+SUN_AZ = {"S1": 318.4, "S2": 206.9, "S3": 25.7, "S4": 12.9, "S8": 317.9}
 SHOT_EXPOSURE = {"S5": 0.3, "S6": -1.6, "S7": 0.5, "S9": 0.1, "SX": 0.7}   # v3 look pass: S5 console crush, SX readable ending   # S9: fully sunlit top-down view (+0.6 bleached the grass to sand)
 
 
@@ -313,7 +316,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     # (v3) cumulus sky (table_mountain_2, sun measured at 8k: u 0.6383, 7.3 deg) instead of the cloudless puresky:
     # the flat blue sky made every wide shot read synthetic. Low golden-hour sun, warmer and weaker (air mass).
     sun, sun_dir = W.build_sky(sc, os.path.join(assets, "hdri", "table_mountain_2_puresky_8k.hdr"),
-                               sun_azimuth_deg=260.3, hdri_sun=(0.6383, 7.27), sun_color=(1.0, 0.74, 0.50),
+                               sun_azimuth_deg=260.3, hdri_sun=SKY_SUN, sun_color=(1.0, 0.74, 0.50),
                                sun_energy=6.0)
     cw = bl.collection("World")
     from . import post
@@ -382,6 +385,9 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     from . import fog
     log("atmospheric fog in", fog.apply(sc, sun_dir, s_mist=0.0004, s_haze=0.00006, sun_col=(1.0, 0.82, 0.60)),
         "materials")   # v3: afternoon - thin ground haze, clearer mid-distance
+    # (v3) per-shot sun: three-quarter back light (sun 35-55 deg off the lens axis, just outside frame) for the valley
+    # shots that had it behind the camera and looked flat; S5-S7, S9, SX keep the real sun down the cutting
+    W.key_sun_per_shot(sc, sun, SKY_SUN, [(f0, SUN_AZ.get(sh.name[:2])) for sh, f0, f1 in SH.timeline(shots)], 260.3)
     sc.render.film_transparent = False
     bpy.ops.file.make_paths_relative() if False else None
     if pack:

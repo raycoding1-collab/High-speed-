@@ -669,6 +669,51 @@ def _scatter_tree():
     return ng
 
 
+def key_sun_per_shot(scene, sun, hdri_sun, shot_az, default_az):
+    """(v3) Per-shot sun cheat, as on a film set: each shot gets the sun where it lights best (three-quarter back
+    light, sun just outside frame). The sun lamp, the HDRI sky (rotated with it, so the visible sun disc and the
+    cloud lighting agree) and the analytic haze's in-scatter direction are keyed together at every shot start
+    (CONSTANT interpolation). shot_az: list of (first_frame, azimuth_deg or None for default_az)."""
+    from mathutils import Vector
+    from . import fog
+    u, elev = hdri_sun
+    phi0 = (u - 0.5) * 2 * math.pi
+    az0 = math.degrees(math.atan2(math.cos(phi0), -math.sin(phi0))) % 360
+    el = math.radians(elev + (1.0 if elev < 10 else 0.0))
+    mp = [n for n in scene.world.node_tree.nodes if n.type == "MAPPING"][0]
+    ng = bpy.data.node_groups.get(fog.GROUP)
+    dots = [n for n in ng.nodes if n.type == "VECT_MATH" and n.operation == "DOT_PRODUCT"] if ng else []
+    for f0, az_deg in shot_az:
+        az_deg = default_az if az_deg is None else az_deg
+        az = math.radians(az_deg)
+        d = (math.sin(az) * math.cos(el), math.cos(az) * math.cos(el), math.sin(el))
+        sun.rotation_quaternion = Vector((-d[0], -d[1], -d[2])).to_track_quat("-Z", "Y")
+        sun.keyframe_insert("rotation_quaternion", frame=f0)
+        mp.inputs["Rotation"].default_value = (0, 0, -math.radians(az0 - az_deg))
+        mp.inputs["Rotation"].keyframe_insert("default_value", frame=f0)
+        for dn in dots:
+            dn.inputs[1].default_value = d
+            dn.inputs[1].keyframe_insert("default_value", frame=f0)
+    for idb in [sun, scene.world.node_tree] + ([ng] if ng else []):
+        ad = idb.animation_data
+        if ad and ad.action:
+            for fc in _fcurves(ad.action):
+                for kp in fc.keyframe_points:
+                    kp.interpolation = "CONSTANT"
+
+
+def _fcurves(action):
+    """F-curves of an action (Blender 5 layered actions keep them in channelbags)."""
+    if hasattr(action, "fcurves") and len(getattr(action, "fcurves", [])):
+        return list(action.fcurves)
+    out = []
+    for layer in getattr(action, "layers", []):
+        for strip in layer.strips:
+            for cb in getattr(strip, "channelbags", []):
+                out.extend(cb.fcurves)
+    return out
+
+
 def _valley_random(nt, oi, hill_max):
     """Object Info > Random, squeezed below hill_max for instances standing above the valley floor (z > 45 m):
     the turning trees (sweetgum, tallow, ginkgo) are village and field-edge trees; the karst hills stay evergreen
