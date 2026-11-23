@@ -301,8 +301,13 @@ def terrain_material(tex, paddy_img):
     rice.color_ramp.elements.new(0.35).color = (0.07, 0.18, 0.02, 1)
     rice.color_ramp.elements.new(0.70).color = (0.10, 0.21, 0.03, 1)
     L(field_var, rice.inputs[0])
-    ripe = nt.nodes.new("ShaderNodeMix"); ripe.data_type = "RGBA"; ripe.inputs["B"].default_value = (0.14, 0.19, 0.035, 1)
-    L(is_ripe, ripe.inputs["Factor"]); L(rice.outputs[0], ripe.inputs["A"])
+    # harvested fields: rice stubble and cut straw, pale gold to brown-gold, some with green regrowth
+    stub = nt.nodes.new("ShaderNodeValToRGB"); se = stub.color_ramp.elements
+    se[0].position = 0.0; se[0].color = (0.17, 0.12, 0.055, 1); se[1].position = 1.0; se[1].color = (0.33, 0.25, 0.12, 1)
+    se.new(0.45).color = (0.25, 0.19, 0.085, 1); se.new(0.80).color = (0.16, 0.17, 0.06, 1)      # ratoon regrowth
+    L(field_var, stub.inputs[0])
+    ripe = nt.nodes.new("ShaderNodeMix"); ripe.data_type = "RGBA"
+    L(is_ripe, ripe.inputs["Factor"]); L(rice.outputs[0], ripe.inputs["A"]); L(stub.outputs[0], ripe.inputs["B"])
     fallow = nt.nodes.new("ShaderNodeMix"); fallow.data_type = "RGBA"
     L(is_fallow, fallow.inputs["Factor"]); L(ripe.outputs["Result"], fallow.inputs["A"]); L(mud.outputs["Color"], fallow.inputs["B"])
     riceN = nt.nodes.new("ShaderNodeTexNoise"); riceN.inputs["Scale"].default_value = 3.0; riceN.inputs["Detail"].default_value = 2
@@ -382,7 +387,7 @@ def terrain_material(tex, paddy_img):
     L(bh2.outputs[0], bbump.inputs["Height"]); L(nm.outputs[0], bbump.inputs["Normal"]); L(bbump.outputs[0], p.inputs["Normal"])
     # water in flooded paddies: mirror-like with slight ripples, muddy tint
     wat = nt.nodes.new("ShaderNodeBsdfPrincipled")
-    wat.inputs["Base Color"].default_value = (0.04, 0.05, 0.025, 1); wat.inputs["Roughness"].default_value = 0.30
+    wat.inputs["Base Color"].default_value = (0.04, 0.05, 0.025, 1); wat.inputs["Roughness"].default_value = 0.07   # still: mirrors sky + karst
     wat.inputs["IOR"].default_value = 1.33
     wat.inputs["Specular IOR Level"].default_value = 0.42
     rip = nt.nodes.new("ShaderNodeTexNoise"); rip.inputs["Scale"].default_value = 1.2; rip.inputs["Detail"].default_value = 2
@@ -393,7 +398,7 @@ def terrain_material(tex, paddy_img):
     nd = nt.nodes.new("ShaderNodeMath"); nd.operation = "SUBTRACT"; nd.inputs[0].default_value = 1.0; L(dike, nd.inputs[1])
     wm2 = nt.nodes.new("ShaderNodeMath"); wm2.operation = "MULTIPLY"; L(water, wm2.inputs[0]); L(nd.outputs[0], wm2.inputs[1])
     L(wm2.outputs[0], wmask.inputs[0]); L(pz2.outputs[0], wmask.inputs[1])
-    wfac = nt.nodes.new("ShaderNodeMath"); wfac.operation = "MULTIPLY"; wfac.inputs[1].default_value = 0.55
+    wfac = nt.nodes.new("ShaderNodeMath"); wfac.operation = "MULTIPLY"; wfac.inputs[1].default_value = 0.85
     L(wmask.outputs[0], wfac.inputs[0])
     mix = nt.nodes.new("ShaderNodeMixShader"); L(wfac.outputs[0], mix.inputs[0]); L(p.outputs[0], mix.inputs[1]); L(wat.outputs[0], mix.inputs[2])
     L(mix.outputs[0], out.inputs[0])
@@ -454,7 +459,7 @@ def karst_material(tex):
 PADDY_X0, PADDY_Y0, PADDY_W, PADDY_H = -1500.0, -1500.0, 6000.0, 3500.0
 
 
-def paddy_image(path, res=1.0, seed=3):
+def paddy_image(path, res=1.0, seed=3, force_green=()):
     """Paddy layout: ~200 m blocks (coarse Voronoi), each with its own orientation, subdivided into parallel
     field strips 10-28 m wide and 25-70 m long.  R = per-field variation, G = dike mask, B = field type
     (0 rice, .33 ripening, .66 flooded, 1 fallow), A = 1."""
@@ -468,7 +473,9 @@ def paddy_image(path, res=1.0, seed=3):
     bang = rng.normal(np.radians(8), np.radians(25), nb)
     bw = rng.uniform(10, 28, nb); bl = rng.uniform(25, 70, nb)
     R = np.zeros((H, W), np.uint8); G = np.zeros((H, W), np.uint8); B = np.zeros((H, W), np.uint8)
-    types = np.array([0.0, 0.33, 0.66, 1.0]); probs = [0.74, 0.20, 0.04, 0.02]
+    # (v3) November round Guilin: the late rice is mostly cut - golden stubble, fields ploughed or flooded for the
+    # next crop, a few still green (late rice / winter vegetables). Was 74 % green: a summer game-map from the air.
+    types = np.array([0.0, 0.33, 0.66, 1.0]); probs = [0.20, 0.46, 0.14, 0.20]
     for y0 in range(0, H, 400):
         ys = np.arange(y0, min(H, y0 + 400))
         xx, yy = np.meshgrid(np.arange(W) + 0.5, ys + 0.5)
@@ -490,6 +497,9 @@ def paddy_image(path, res=1.0, seed=3):
         R[ys] = (var * 255).reshape(len(ys), W)
         B[ys] = (types[np.clip(tsel, 0, 3)] * 255).reshape(len(ys), W)
         G[ys] = (edge * 255).reshape(len(ys), W)
+        for (gx, gy, gr) in force_green:                 # fields round a low camera keep their standing rice
+            near = np.hypot(xx * res + PADDY_X0 - gx, yy * res + PADDY_Y0 - gy) < gr
+            B[ys] = np.where(near, 0, B[ys])
     g = Image.fromarray(G).filter(ImageFilter.GaussianBlur(0.45))
     img = Image.merge("RGBA", (Image.fromarray(R), g, Image.fromarray(B), Image.fromarray(np.full((H, W), 255, np.uint8))))
     img = img.transpose(Image.FLIP_TOP_BOTTOM)

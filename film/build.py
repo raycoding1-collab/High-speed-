@@ -322,7 +322,8 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     log("terrain")
     pimg_path = os.path.join(texdir, "paddies.png")
     if not os.path.exists(pimg_path):
-        W.paddy_image(pimg_path)
+        c2_ = [sh_ for sh_ in SH.build_shots() if sh_.name.startswith("S2")][0].cam_fn(0.0)
+        W.paddy_image(pimg_path, force_green=[(float(c2_[0]), float(c2_[1]), 70.0)])
     pimg = bpy.data.images.load(pimg_path)
     PADDY_PATH[0] = pimg_path
     mats = dict(terrain=W.terrain_material(tex, pimg), karst=W.karst_material(tex))
