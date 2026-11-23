@@ -196,7 +196,7 @@ def key_shot_exposure(scene, shots):
                     kp.interpolation = "CONSTANT"
 
 
-FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car1", "S9": 60.0, "SX": 80.0}
+FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car8", "S9": 60.0, "SX": 80.0}
 
 
 def make_cameras(scene, shots, res):
@@ -601,11 +601,9 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     # the real-tree corridor strip ends; keep 150 m from the low cameras that look at it close up
     def massif(p, n):
         s_, lat_ = A.nearest_s(p[:, 0], p[:, 1])
-        k = (n[:, 2] > 0.45) & (np.abs(lat_) > 28.0) & (W.natural_ground(p[:, 0], p[:, 1]) > 7.0)
-        for sh in SH.build_shots():
-            if sh.name[:2] in ("S7", "S9", "SX") and sh.cam_fn is not None:
-                c = np.asarray(sh.cam_fn(0.0), float)
-                k &= np.hypot(p[:, 0] - c[0], p[:, 1] - c[1]) > 150.0
+        k = (n[:, 2] > 0.45) & (W.natural_ground(p[:, 0], p[:, 1]) > 7.0)
+        # the line itself: no trees on the cutting slopes / track (but the hill face above the portal is forested)
+        k &= (np.abs(lat_) > 28.0) | ((s_ > A.TUNNEL_S - 6.0) & (p[:, 2] > A.RAIL_Z + 9.0))
         return k & _sightline_mask(p, 6.0)
     # only the hills around the cutting / tunnel that the cameras actually see (the far grid also holds the distant
     # ranges: spreading the budget over all of them left the near massif bare)
@@ -621,6 +619,12 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     cx_, cy_ = A.xy(np.arange(3600.0, A.TUNNEL_S + 60, 40.0))
     dmin = np.min(np.hypot(pts[:, 0, None] - cx_[None, :], pts[:, 1, None] - cy_[None, :]), axis=1) if len(pts) else np.zeros(0)
     near = dmin < 500.0
+    # simplified crowns never stand within 150 m of the low cutting cameras (real conifers may)
+    for sh in SH.build_shots():
+        if sh.name[:2] in ("S7", "S9", "SX") and sh.cam_fn is not None and len(pts):
+            c = np.asarray(sh.cam_fn(0.0), float)
+            close = np.hypot(pts[:, 0] - c[0], pts[:, 1] - c[1]) < 150.0
+            pts, near = pts[~close | near], near[~close | near]
     log("  massif crowns", int((~near).sum()), "real conifers near the cameras", int(near.sum()))
     W.scatter_tree("VegMassif", coll, pts[~near], crowns, (2.6, 5.8), 8, wind=0.0)
     if conifers and near.any():
