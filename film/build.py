@@ -699,7 +699,9 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         f_ = (X - c2[0]) * fwd[0] + (Y - c2[1]) * fwd[1]; l_ = (X - c2[0]) * lft[0] + (Y - c2[1]) * lft[1]
         d = b1 - b0; nrm = np.array([d[1], -d[0]]) / np.linalg.norm(d)
         return (f_ - b0[0]) * nrm[0] + (l_ - b0[1]) * nrm[1]
-    W.scatter_rice(coll, src, c2, 42.0 if scale >= 1 else 25.0, PADDY_PATH[0], keep_fn=lambda X, Y: side(X, Y) < -0.6)
+    _sp = to_xy(12.5, 4.6)
+    W.scatter_rice(coll, src, c2, 42.0 if scale >= 1 else 25.0, PADDY_PATH[0],
+                   keep_fn=lambda X, Y: (side(X, Y) < -0.6) & (np.hypot(X - _sp[0], Y - _sp[1]) > 3.4))
     tt = np.linspace(0, 1, 40)
     bx, by = to_xy(b0[0] + (b1[0] - b0[0]) * tt, b0[1] + (b1[1] - b0[1]) * tt)
     from . import materials as M_
@@ -723,12 +725,9 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     # (v3) story element: a village earth-god shrine (tudi miao) on the harvested side of the bund, left of the
     # viaduct, facing the field path and the camera at three-quarters - incense burning, red couplets
     from . import shrine as SHR
-    fs_, ls_ = 27.5, 6.5
-    d_ = b1 - b0; nrm_ = np.array([d_[1], -d_[0]]) / np.linalg.norm(d_)
-    fs_, ls_ = fs_ + nrm_[0] * 1.2, ls_ + nrm_[1] * 1.2                # just beyond the bund grass
-    shx, shy = to_xy(fs_, ls_)
-    shz = float(W.natural_ground(np.array([shx]), np.array([shy]))[0])
-    sh_head = math.atan2(c2[1] - shy, c2[0] - shx) - math.radians(24.0)
+    shx, shy = to_xy(12.5, 4.6)                                          # ~13 m out, left third of the frame
+    shz = float(W.natural_ground(np.array([shx]), np.array([shy]))[0]) + 0.25        # on a raised earth platform
+    sh_head = math.atan2(c2[1] - shy, c2[0] - shx) + math.radians(32.0)  # front turned toward the low western sun
     SHR.earth_god_shrine(coll, shx, shy, shz, sh_head, np.random.default_rng(8), assets=assets)
     bx_, by_ = shx - math.cos(sh_head) * 1.4, shy - math.sin(sh_head) * 1.4      # body centre, behind the apron
     PR.KEEPOUT.append((bx_, by_, 3.0))

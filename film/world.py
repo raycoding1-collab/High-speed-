@@ -733,7 +733,11 @@ def _leaf_material(name, c0, c1, vor_scale, bump, sss):
         t1 = e.new(0.805); t1.color = (3.0, 1.7, 0.55, 1)            # ginkgo / amber-yellow
         t2 = e.new(0.87); t2.color = (3.8, 1.15, 0.40, 1)            # tallow orange
         t3 = e.new(0.93); t3.color = (4.2, 0.70, 0.30, 1)            # sweetgum red
-    L(_valley_random(nt, oi, 0.79) if name == "CrownLeaves" else oi.outputs["Random"], tint.inputs[0])
+    if name == "CrownLeaves":            # simplified crowns: only a trace of turning (real tree models carry autumn)
+        sq = nt.nodes.new("ShaderNodeMath"); sq.operation = "MULTIPLY"; sq.inputs[1].default_value = 0.82
+        L(oi.outputs["Random"], sq.inputs[0]); L(sq.outputs[0], tint.inputs[0])
+    else:
+        L(oi.outputs["Random"], tint.inputs[0])
     mul = nt.nodes.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs["Factor"].default_value = 1.0
     L(cr.outputs[0], mul.inputs["A"]); L(tint.outputs[0], mul.inputs["B"]); L(mul.outputs["Result"], p.inputs["Base Color"])
     bp = nt.nodes.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = 1.0; bp.inputs["Distance"].default_value = bump
