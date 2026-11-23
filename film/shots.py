@@ -151,15 +151,14 @@ def build_shots():
                       "Remote low camera in the cess ditch, 3.0 m from the nearest rail, 2.0 m from the car body; pass-by then wake",
                       lambda t, c=c7: c, _s7_aim, fstop=2.8, jolt=True,
                       ramp=(2.64, 2.90, 0.10, 0.12, 0.18)))   # SHOWSTOPPER 1: 240 fps (10 %) as the nose passes
-    # S8 long lens (v3, late-afternoon sun): from a 10 m camera tower beside the line, 600 mm looks EAST along the
-    # curving viaduct as the train draws away towards the forested hills - the low sun is straight behind the lens,
-    # so train, viaduct and hills are front-lit in gold and compressed into one plane (a head-on view would look
-    # straight into the sun)
-    c8 = _rail(2330, 70.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 25.0   # crane / hilltop: clears the hamlet roofs
-    s8_0 = 2700.0 + S.TRAIN_LENGTH                         # tail at s 2700 when the shot starts
-    shots.append(Shot("S8_tele", 9.0, s8_0, 600,
-                      "600 mm from a camera tower beside the line, looking east along the curve: the train draws away into the golden, forested hills",
-                      lambda t, c=c8: c, lambda t, sh=None: _rail(s8_0 + V * t - S.TRAIN_LENGTH + 25, A.track_offset(), 2.4), fstop=8))
+    # S8 long lens (v3, late-afternoon sun): 400 mm from a 25 m crane on the valley floor 1.15 km south of the line,
+    # panning with the train as it crosses the viaduct; the karst towers behind it are side-lit by the low WSW sun
+    # and compressed right behind the train
+    c8 = _rail(2700, -1150.0, 0); c8[2] = _ground_at(c8[0], c8[1]) + 25.0
+    s8_0 = 2300.0
+    shots.append(Shot("S8_tele", 9.0, s8_0, 400,
+                      "400 mm from a crane 1.15 km south: panning with the train across the viaduct, karst towers compressed behind it",
+                      lambda t, c=c8: c, lambda t, sh=None: _rail(s8_0 + V * t - 80.0, A.track_offset(), 2.4), fstop=8))
     # S9 tunnel portal
     c9 = _rail(A.TUNNEL_S + 9.0, 4.0, 0); c9[2] = _ground_at(c9[0], c9[1]) + 1.7   # on the hill right above the portal
     # Showstopper: a cable-cam over the portal pushes in (8 m forward, 2.5 m down at up to 9 m/s) and tilts down to

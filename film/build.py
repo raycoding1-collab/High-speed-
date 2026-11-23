@@ -142,7 +142,7 @@ def _fcurves(action):
 
 
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
-SHOT_EXPOSURE = {"S6": -0.6, "S7": 0.5, "S9": 0.6, "SX": 0.3}
+SHOT_EXPOSURE = {"S6": -1.2, "S7": 0.5, "S9": 0.6, "SX": 0.3}
 
 
 def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
@@ -204,7 +204,7 @@ def key_shot_exposure(scene, shots):
                     kp.interpolation = "CONSTANT"
 
 
-FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car8", "S9": 60.0, "SX": 80.0}
+FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car3", "S9": 60.0, "SX": 80.0}
 
 
 def make_cameras(scene, shots, res):
@@ -507,7 +507,8 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     def slope_near(lo, hi, lat_min, clear=True):
         def f(p, n):
             s, lat = A.nearest_s(p[:, 0], p[:, 1])
-            k = (s > lo) & (s < hi) & (np.abs(lat) > lat_min) & (n[:, 2] > 0.42)
+            face = (s > A.TUNNEL_S - 6.0) & (p[:, 2] > A.RAIL_Z + 9.0)          # hill face above the portal
+            k = (s > lo) & (s < hi) & ((np.abs(lat) > lat_min) | face) & (n[:, 2] > 0.42)
             return k & _sightline_mask(p, 6.0) if clear else k
         return f
     pts = W.sample_surface([strip], 0.035 * scale, rng, slope_near(3700, 4700, 30), max_n=40000)
