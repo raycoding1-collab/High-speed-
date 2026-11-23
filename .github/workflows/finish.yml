@@ -92,6 +92,10 @@ jobs:
           pattern: frames-p${{ matrix.job }}-*
           path: frames
           merge-multiple: true
+      - name: Extra swap (memory headroom for the big v3 scene)
+        run: |
+          sudo fallocate -l 10G /swapextra && sudo chmod 600 /swapextra && sudo mkswap /swapextra && sudo swapon /swapextra || true
+          free -g
       - name: Render
         run: |
           nproc; lscpu | grep -E "Model name|^CPU\(s\)" || true

@@ -402,10 +402,12 @@ def _sightline_mask(p, clear=9.0):
             c = np.asarray(sh.cam_fn(t)); a = np.asarray(sh.aim_fn(t))
             d = a - c; L = np.linalg.norm(d); d = d / L
             v = p - c
-            tt = np.clip(v @ d, 0, L if sh.lens >= 100 else min(L, 400))
+            long = sh.lens >= 100
+            tt = np.clip(v @ d, 0, L if long else min(L, 400))
             dist = np.linalg.norm(v - tt[:, None] * d[None, :], axis=1)
-            keep &= dist > np.maximum(clear, 0.04 * tt)
-            keep &= np.linalg.norm(v, axis=1) > 20.0                # nothing growing right at the camera position
+            # crowns are up to ~9 m in radius and 17 m tall: a long lens needs a wider clear corridor
+            keep &= dist > np.maximum(18.0 if long else clear, 0.04 * tt)
+            keep &= np.linalg.norm(v, axis=1) > (45.0 if long else 20.0)   # nothing growing right at the camera
     return keep
 
 
@@ -438,7 +440,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         # dense subtropical scrub forest everywhere it can cling; bare limestone only on the steepest faces
         keep_p = np.clip((n[:, 2] - 0.18) / 0.35, 0, 1) * 0.95
         return rng.random(len(p)) < keep_p
-    pts = W.sample_surface(towers, 0.03 * scale, rng, tower_filter, max_n=900000)
+    pts = W.sample_surface(towers, 0.023 * scale, rng, tower_filter, max_n=900000)
     log("  tower crowns", len(pts))
     W.scatter_tree("VegTowers", coll, pts, crowns, (2.8, 6.5), 1, wind=0.0)
     # hill massif & corridor slopes near the cutting / portal: real trees + shrubs + grass
@@ -459,13 +461,13 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         k = slope_near(3900, 4520, 6.6, clear=False)(p, n)
         s_, lat_ = A.nearest_s(p[:, 0], p[:, 1])
         return k & ~infra.on_lattice(s_, np.abs(lat_)) & ~((np.abs(lat_) > 5.6) & (np.abs(lat_) < 6.9))   # not on beams / in drains
-    pts = W.sample_surface([strip], 8.0 * scale, rng, cut_grass, max_n=320000)
+    pts = W.sample_surface([strip], 5.5 * scale, rng, cut_grass, max_n=320000)
     log("  cutting grass", len(pts))
     # close to the S7 trackside camera the hydroseeded pockets are thick with grass (the camera is 3 m from the slope)
     c7 = np.asarray([sh for sh in SH.build_shots() if sh.name.startswith("S7")][0].cam_fn(0.0), float)
     def near7(p, n):
         return cut_grass(p, n) & (np.hypot(p[:, 0] - c7[0], p[:, 1] - c7[1]) < 45.0)
-    p7 = W.sample_surface([strip], 45.0 * scale, rng, near7, max_n=120000,
+    p7 = W.sample_surface([strip], 32.0 * scale, rng, near7, max_n=120000,
                           tri_filter=lambda c: np.hypot(c[:, 0] - c7[0], c[:, 1] - c7[1]) < 48.0)
     if len(pts):
         pts = np.concatenate([pts, p7])
