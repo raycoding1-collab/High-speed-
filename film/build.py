@@ -169,10 +169,18 @@ def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
     log("  shutter keyed: min", round(min(vals), 3), "frames")
 
 
+# camera white balance per shot, like a DP setting the camera for the light it shoots in: the cutting shots lie
+# in shade lit by the blue morning sky (~8000 K), so they are balanced for shade instead of rendering cold navy
+SHOT_WB = {"S7": 7600.0, "S9": 8000.0, "SX": 7800.0}
+
+
 def key_shot_exposure(scene, shots):
+    scene.view_settings.use_white_balance = True
     for sh, f0, f1 in SH.timeline(shots):
         scene.view_settings.exposure = SHOT_EXPOSURE.get(sh.name[:2], 0.0)
         scene.view_settings.keyframe_insert("exposure", frame=f0)
+        scene.view_settings.white_balance_temperature = SHOT_WB.get(sh.name[:2], 6500.0)
+        scene.view_settings.keyframe_insert("white_balance_temperature", frame=f0)
     # the finale fades to black over its last 1.25 s (per-frame keys, so CONSTANT interpolation is fine)
     sx = [(sh, f0, f1) for sh, f0, f1 in SH.timeline(shots) if sh.name.startswith("SX")]
     if sx:
@@ -183,7 +191,7 @@ def key_shot_exposure(scene, shots):
             scene.view_settings.keyframe_insert("exposure", frame=f1 - n + k)
     if scene.animation_data and scene.animation_data.action:
         for fc in _fcurves(scene.animation_data.action):
-            if fc.data_path == "view_settings.exposure":
+            if fc.data_path in ("view_settings.exposure", "view_settings.white_balance_temperature"):
                 for kp in fc.keyframe_points:
                     kp.interpolation = "CONSTANT"
 
