@@ -669,7 +669,18 @@ def _valley_random(nt, oi, hill_max):
     L(sz.outputs["Z"], low.inputs[0])
     f = nt.nodes.new("ShaderNodeMapRange"); f.inputs[1].default_value = 0.0; f.inputs[2].default_value = 1.0
     f.inputs[3].default_value = hill_max; f.inputs[4].default_value = 1.0; L(low.outputs[0], f.inputs[0])
-    m = nt.nodes.new("ShaderNodeMath"); m.operation = "MULTIPLY"; L(oi.outputs["Random"], m.inputs[0]); L(f.outputs[0], m.inputs[1])
+    # turning trees grow in groves (field edges, village fengshui woods): a ~300 m noise field decides where; inside
+    # a grove ~35 % have turned, outside none (an even 20 % sprinkle read as polka dots on the crown carpet)
+    nz = nt.nodes.new("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = 0.0033; nz.inputs["Detail"].default_value = 1.0
+    L(oi.outputs["Location"], nz.inputs["Vector"])
+    hot = nt.nodes.new("ShaderNodeMapRange"); hot.inputs[1].default_value = 0.52; hot.inputs[2].default_value = 0.62
+    hot.inputs[3].default_value = hill_max; hot.inputs[4].default_value = 1.28; L(nz.outputs["Fac"], hot.inputs[0])
+    sc = nt.nodes.new("ShaderNodeMapRange"); sc.inputs[1].default_value = hill_max; sc.inputs[2].default_value = 1.0
+    sc.inputs[3].default_value = hill_max; sc.inputs[4].default_value = 1.28; L(f.outputs[0], sc.inputs[0])
+    fac = nt.nodes.new("ShaderNodeMath"); fac.operation = "MINIMUM"; L(sc.outputs[0], fac.inputs[0]); L(hot.outputs[0], fac.inputs[1])
+    # factor: hills -> hill_max (no turned trees); valley -> hill_max outside groves .. 1.28 inside (~35 % turned)
+    m = nt.nodes.new("ShaderNodeMath"); m.operation = "MULTIPLY"; m.use_clamp = True
+    L(oi.outputs["Random"], m.inputs[0]); L(fac.outputs[0], m.inputs[1])
     return m.outputs[0]
 
 
