@@ -144,7 +144,7 @@ def _fcurves(action):
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
 SKY_SUN = (0.6383, 7.27)                       # table_mountain_2_puresky: sun disc u, elevation (measured at 8k)
 # per-shot sun azimuth (compass deg): view azimuth -/+ 35-55 deg -> three-quarter back light (others: 260.3)
-SUN_AZ = {"S1": 318.4, "S2": 231.9, "S3": 350.7, "S4": 317.9}   # tested: back light washes the long lenses out
+SUN_AZ = {"S1": 318.4, "S2": 231.9, "S4": 317.9}   # S3 tested both ways: lit from the north the massif forest turned whitish   # tested: back light washes the long lenses out
 # through km of haze (S4/S8) and whitens the far massif (S3): those get side-back / side light, S8 keeps the real sun
 SHOT_EXPOSURE = {"S2": 0.3, "S5": 0.3, "S6": -1.6, "S7": 0.5, "S9": 0.1, "SX": 0.7}   # v3 look pass: S5 console crush, SX readable ending   # S9: fully sunlit top-down view (+0.6 bleached the grass to sand)
 
