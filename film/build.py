@@ -483,6 +483,23 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     })
     for k, o in models.items():
         log("  model", k, o.name, len(o.data.polygons))
+    # (v3) the pine_tree_01 needle cards are 93 % grey-brown (an autumn/dry pine): at 1-3 km the pine half of the
+    # conifer forest read as a grey gravel heap. Masson pine / Chinese fir in Guangxi are mid green.
+    for k, hue, sat in (("pine", 0.5 + 45 / 360, 1.6), ("fir", 0.5 + 12 / 360, 1.1)):
+        if k not in models:
+            continue
+        for sl in models[k].material_slots:
+            m = sl.material
+            if m is None or "twig" not in m.name or not m.use_nodes:
+                continue
+            nt = m.node_tree
+            for l in list(nt.links):
+                if l.to_node.type == "BSDF_PRINCIPLED" and l.to_socket.name == "Base Color":
+                    hs = nt.nodes.new("ShaderNodeHueSaturation")
+                    hs.inputs["Hue"].default_value = hue; hs.inputs["Saturation"].default_value = sat
+                    hs.inputs["Value"].default_value = 1.05
+                    nt.links.new(l.from_socket, hs.inputs["Color"]); nt.links.new(hs.outputs["Color"], l.to_socket)
+                    log("  needle colour", m.name)
     trees = [models[k] for k in ("tree1", "tree2", "tree3", "tree4") if k in models]
     conifers = [models[k] for k in ("pine", "fir") if k in models]
     hill_species = (conifers * 3 + trees[3:4]) if conifers else trees            # 3:3:1 pine : fir : broadleaf
