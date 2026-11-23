@@ -659,6 +659,20 @@ def _scatter_tree():
     return ng
 
 
+def _valley_random(nt, oi, hill_max):
+    """Object Info > Random, squeezed below hill_max for instances standing above the valley floor (z > 45 m):
+    the turning trees (sweetgum, tallow, ginkgo) are village and field-edge trees; the karst hills stay evergreen
+    (v3: a uniform 20 % read as orange polka dots on the towers)."""
+    L = nt.links.new
+    sz = nt.nodes.new("ShaderNodeSeparateXYZ"); L(oi.outputs["Location"], sz.inputs[0])
+    low = nt.nodes.new("ShaderNodeMath"); low.operation = "LESS_THAN"; low.inputs[1].default_value = 45.0
+    L(sz.outputs["Z"], low.inputs[0])
+    f = nt.nodes.new("ShaderNodeMapRange"); f.inputs[1].default_value = 0.0; f.inputs[2].default_value = 1.0
+    f.inputs[3].default_value = hill_max; f.inputs[4].default_value = 1.0; L(low.outputs[0], f.inputs[0])
+    m = nt.nodes.new("ShaderNodeMath"); m.operation = "MULTIPLY"; L(oi.outputs["Random"], m.inputs[0]); L(f.outputs[0], m.inputs[1])
+    return m.outputs[0]
+
+
 def autumn_tint(mat, start=0.78):
     """(v3) Per-instance autumn colour for an image-textured leaf material: a share (1 - start) of the instances
     (Object Info > Random) turn ginkgo-yellow / tallow-orange / sweetgum-red by a hue shift of their own leaf
@@ -669,12 +683,13 @@ def autumn_tint(mat, start=0.78):
     if not tgt:
         return False
     oi = nt.nodes.new("ShaderNodeObjectInfo")
+    rnd = _valley_random(nt, oi, 1.0 - (1.0 - start) - 0.01)
     def ramp(vals):
         r = nt.nodes.new("ShaderNodeValToRGB"); r.color_ramp.interpolation = "CONSTANT"; e = r.color_ramp.elements
         e[0].position = 0.0; e[0].color = (vals[0],) * 3 + (1,); e[1].position = start; e[1].color = (vals[1],) * 3 + (1,)
         a = e.new(start + (1 - start) * 0.38); a.color = (vals[2],) * 3 + (1,)
         b = e.new(start + (1 - start) * 0.70); b.color = (vals[3],) * 3 + (1,)
-        L(oi.outputs["Random"], r.inputs[0]); return r.outputs["Color"]
+        L(rnd, r.inputs[0]); return r.outputs["Color"]
     hue = ramp((0.5, 0.5 - 48 / 360, 0.5 - 66 / 360, 0.5 - 84 / 360))
     sat = ramp((1.0, 1.25, 1.35, 1.4)); val = ramp((1.0, 1.12, 1.05, 0.92))
     for l in tgt:
@@ -707,7 +722,7 @@ def _leaf_material(name, c0, c1, vor_scale, bump, sss):
         t1 = e.new(0.805); t1.color = (3.0, 1.7, 0.55, 1)            # ginkgo / amber-yellow
         t2 = e.new(0.87); t2.color = (3.8, 1.15, 0.40, 1)            # tallow orange
         t3 = e.new(0.93); t3.color = (4.2, 0.70, 0.30, 1)            # sweetgum red
-    L(oi.outputs["Random"], tint.inputs[0])
+    L(_valley_random(nt, oi, 0.79) if name == "CrownLeaves" else oi.outputs["Random"], tint.inputs[0])
     mul = nt.nodes.new("ShaderNodeMix"); mul.data_type = "RGBA"; mul.blend_type = "MULTIPLY"; mul.inputs["Factor"].default_value = 1.0
     L(cr.outputs[0], mul.inputs["A"]); L(tint.outputs[0], mul.inputs["B"]); L(mul.outputs["Result"], p.inputs["Base Color"])
     bp = nt.nodes.new("ShaderNodeBump"); bp.inputs["Strength"].default_value = 1.0; bp.inputs["Distance"].default_value = bump
@@ -798,7 +813,7 @@ def bamboo_proxy(name, coll, seed=0):
             c = P(t) + rng.normal(0, 0.07, 3)
             _lobe(bm, rng, c[0], c[1], c[2], 0.13 + 0.13 * math.sin(math.pi * min(t, 0.95)) * rng.uniform(0.8, 1.2),
                   subdiv=1, squash=0.8, rough=0.22)
-    leaf = _leaf_material("BambooLeaves", (0.05, 0.10, 0.015), (0.20, 0.27, 0.05), 22.0, 0.08, 0.25)
+    leaf = _leaf_material("BambooLeaves", (0.03, 0.07, 0.02), (0.10, 0.17, 0.06), 22.0, 0.08, 0.12)
     return _finish_proxy(name, coll, bm, leaf, lambda zc: np.zeros(len(zc), bool))
 
 

@@ -639,7 +639,8 @@ def build_vegetation(coll, assets, towers, scale=1.0):
                 c_ = np.asarray(sh_.cam_fn(t)); path.append((c_[0], c_[1], reach))
     path = np.array(path)
     d1 = np.hypot(vp[:, 0, None] - path[None, :, 0], vp[:, 1, None] - path[None, :, 1]) - path[None, :, 2]
-    near1 = (np.min(d1, axis=1) < 0) & ~is_bamboo
+    near1 = np.min(d1, axis=1) < 0                 # v3: bamboo proxies near the cameras too (lime blobs up close)
+    is_bamboo = is_bamboo & ~near1
     if "tree4" in models and near1.any():
         W.scatter_tree("VegValleyNearS1", coll, vp[near1], [models["tree4"]], (1.3, 1.9), 16, wind=0.03)
     log("  real broadleaf trees near the S1/S3/S4 cameras", int(near1.sum()))
