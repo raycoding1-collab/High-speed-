@@ -107,20 +107,25 @@ def formation(s, lat, g):
     form_z = A.RAIL_Z - 0.85                 # formation level below rail
     half = 7.0                               # formation half width (double track + cess + ditch)
     out = g.copy()
-    on = (s > A.VIADUCT[1] - 20) & (s < A.TUNNEL_S + 80)
+    # (v3) the 1:1 portal face now runs on until it meets the natural hill (~190 m above the portal): ending it at
+    # TUNNEL_S + 80 left a 120 m vertical wall that the western sun lit up as a pale scar over the hill
+    on = (s > A.VIADUCT[1] - 20) & (s < A.TUNNEL_S + 260)
     al = np.abs(lat)
     # cutting slope 1:1 (soil) / embankment slope 1:1.5
     ex = np.maximum(al - half, 0)
-    face = np.maximum(s - (A.TUNNEL_S - 14.0), 0.0)          # 1:1 portal face above the tunnel
+    fd = np.maximum(s - (A.TUNNEL_S - 14.0), 0.0)            # 1:1 portal face above the tunnel, benched like the side walls
+    ft = np.floor(fd / 10.0)
+    face = ft * 8.0 + np.minimum(fd - ft * 10.0, 8.0)
     form_z = form_z + face
     tier = np.floor(ex / 10.0)                       # 1:1 slope, 2 m bench every 8 m of height
     cut = form_z + tier * 8.0 + np.minimum(ex - tier * 10.0, 8.0)
     fill = form_z - np.maximum(al - half, 0) / 1.5
-    target = np.where(g > form_z, np.minimum(g, cut), np.maximum(g, fill))
+    target = np.where(g > form_z, np.minimum(g, cut), np.where(face > 0, g, np.maximum(g, fill)))   # the face only ever cuts
     # ditches at the cutting toe
     ditch = (al > half - 1.2) & (al < half - 0.3) & (g > form_z)
     target = np.where(ditch, target - 0.5, target)
-    w = np.clip((s - (A.VIADUCT[1] - 20)) / 30, 0, 1) * np.clip((A.TUNNEL_S + 80 - s) / 20, 0, 1)
+    w = np.clip((s - (A.VIADUCT[1] - 20)) / 30, 0, 1) * np.clip((A.TUNNEL_S + 260 - s) / 40, 0, 1)
+    w = w * np.clip((160.0 - al) / 25.0, 0, 1)      # meet the far terrain exactly at the strip edge (was a 28 m step)
     out = np.where(on, g * (1 - w) + target * w, g)
     return out
 
@@ -188,7 +193,7 @@ def build_terrain(coll, mats):
     # (v3) include the 1:1 portal face over the tunnel (|lat| < 7.2): unflagged it fell back to bare limestone and
     # showed as a pale scar on the hill in the sun
     cutz = ((nat > V[:, 2] + 0.3) & ((np.abs(L2d) > 7.2) | (S2d > A.TUNNEL_S - 16.0)) & (S2d > A.VIADUCT[1])
-            & (S2d < A.TUNNEL_S + 30)).astype(np.float32)
+            & (S2d < A.TUNNEL_S + 260)).astype(np.float32)
     az = strip.data.attributes.new("cutzone", "FLOAT", "POINT"); az.data.foreach_set("value", cutz)
     strip.data.materials.append(mats["terrain"])
     return far, strip

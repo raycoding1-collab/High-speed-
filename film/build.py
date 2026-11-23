@@ -514,7 +514,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     pts = W.sample_surface([strip], 0.035 * scale, rng, slope_near(3700, 4700, 30), max_n=40000)
     log("  hill trees", len(pts))
     W.scatter_tree("VegHillTrees", coll, pts, hill_species, (0.6, 1.1), 2, wind=0.03)
-    pts = W.sample_surface([strip], 0.30 * scale, rng, slope_near(3750, 4600, 8.5), max_n=90000)
+    pts = W.sample_surface([strip], 0.30 * scale, rng, slope_near(3750, 4660, 8.5), max_n=90000)
     W.scatter_tree("VegHillShrubs", coll, pts, shrubs, (0.7, 1.5), 3, wind=0.06)
     def cut_grass(p, n):
         k = slope_near(3900, 4520, 6.6, clear=False)(p, n)
