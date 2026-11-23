@@ -396,12 +396,16 @@ def _sightline_mask(p, clear=9.0):
     for sh in SH.build_shots():
         if sh.attach or sh.cam_fn is None or sh.aim_fn is None:
             continue
-        c = np.asarray(sh.cam_fn(0.0)); a = np.asarray(sh.aim_fn(0.0))
-        d = a - c; L = np.linalg.norm(d); d = d / L
-        v = p - c
-        tt = np.clip(v @ d, 0, min(L, 400))
-        dist = np.linalg.norm(v - tt[:, None] * d[None, :], axis=1)
-        keep &= dist > np.maximum(clear, 0.04 * tt)
+        # (v3) the whole shot, not just its first frame: the S8 600 mm lens follows the train for 9 s and a single
+        # fir on the rim in front of it blacked out the frame; long lenses keep their full line of sight clear
+        for t in np.linspace(0.0, sh.sim_dur, 5):
+            c = np.asarray(sh.cam_fn(t)); a = np.asarray(sh.aim_fn(t))
+            d = a - c; L = np.linalg.norm(d); d = d / L
+            v = p - c
+            tt = np.clip(v @ d, 0, L if sh.lens >= 100 else min(L, 400))
+            dist = np.linalg.norm(v - tt[:, None] * d[None, :], axis=1)
+            keep &= dist > np.maximum(clear, 0.04 * tt)
+            keep &= np.linalg.norm(v, axis=1) > 20.0                # nothing growing right at the camera position
     return keep
 
 
