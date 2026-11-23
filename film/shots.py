@@ -162,20 +162,20 @@ def build_shots():
     # the nose as it dives into the mountain beneath the lens, snapping into 200 fps
     p9 = _rail(A.TUNNEL_S + 1.0, 4.0, 0); p9[2] = c9[2] - 2.5
     def _push(t):
-        w = min(max((t - 1.55) / 1.15, 0.0), 1.0)
+        w = min(max((t - 1.40) / 1.00, 0.0), 1.0)
         return w * w * (3 - 2 * w)
     def _s9_cam(t, c=c9, p=p9):
         return c + (p - c) * _push(t)
     def _s9_aim(t):
         base = _rail(4330, A.track_offset(), 1.0)
         s_nose = 4450 - V * 2.6 + V * t
-        nose = _rail(min(s_nose - 3.0, A.TUNNEL_S - 2.0), A.track_offset(), 1.8)
-        w = min(max((t - 1.9) / 0.75, 0.0), 1.0); w = w * w * (3 - 2 * w)
+        nose = _rail(min(s_nose - 3.0, A.TUNNEL_S - 12.0), A.track_offset(), 1.8)   # stop tilting before vertical
+        w = min(max((t - 1.7) / 0.55, 0.0), 1.0); w = w * w * (3 - 2 * w)
         return base * (1 - w) + nose * w
     shots.append(Shot("S9_portal", 6.5, 4450 - V * 2.6, 24,
                       "On the hill above the portal looking down the cutting: the train races at the lens and dives into the mountain beneath it; cut 2 s after the tail is in",
                       _s9_cam, _s9_aim, fstop=8,
-                      ramp=(2.50, 2.78, 0.12, 0.12, 0.20)))   # SHOWSTOPPER 2: 200 fps (12 %) as the nose dives in
+                      ramp=(2.22, 2.50, 0.12, 0.12, 0.20)))   # SHOWSTOPPER 2: 200 fps (12 %), nose 40 -> 10 m from the portal
     return shots
 
 
