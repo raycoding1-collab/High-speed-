@@ -42,6 +42,43 @@ def png_complete(path):
         return False
 
 
+# (v3) per-shot vegetation visibility: instances a shot cannot see are not loaded into the render (each costs
+# ~15-20 KB). The wide valley shots (S1/S3/S4/S8) were near the 16 GB of a GitHub runner with all 424k instances
+# loaded; runners went into swap thrash at the S3 frames and were lost. Names are prefixes of instancer objects.
+HIDE_BY_SHOT = {
+    "S1": ("VegCuttingGrass", "VegPortal", "VegRice", "VegS2Stubble", "VegS2Bund"),
+    "S2": ("VegCuttingGrass", "VegPortal"),
+    "S3": ("VegCuttingGrass", "VegPortal", "VegRice", "VegS2Stubble", "VegS2Bund"),
+    "S4": ("VegCuttingGrass", "VegPortal", "VegRice", "VegS2Stubble", "VegS2Bund"),
+    "S5": ("VegRice", "VegS2Stubble", "VegS2Bund"),
+    "S6": ("VegRice", "VegS2Stubble", "VegS2Bund", "VegPortal"),
+    "S7": ("VegRice", "VegS2Stubble", "VegS2Bund"),
+    "S8": ("VegCuttingGrass", "VegPortal", "VegRice", "VegS2Stubble", "VegS2Bund"),
+    "S9": ("VegRice", "VegS2Stubble", "VegS2Bund"),
+    "SX": ("VegRice", "VegS2Stubble", "VegS2Bund"),
+}
+
+
+def apply_shot_visibility(bpy, cam_name):
+    key = cam_name[4:6] if cam_name and cam_name.startswith("CAM_") else None
+    hide = () if os.environ.get("RENDER_NO_HIDE") else HIDE_BY_SHOT.get(key, ())
+    n = 0
+    for ob in bpy.data.objects:
+        if ob.name.startswith("Veg"):
+            h = ob.name.startswith(hide)
+            if ob.hide_render != h:
+                ob.hide_render = h
+            n += h
+            # no per-instance object motion blur on plants: wind sway over a 1/48 s shutter is invisible, but the
+            # motion steps of 400k instances multiply the render's geometry memory (camera blur still applies)
+            if not os.environ.get("RENDER_VEG_MB"):
+                try:
+                    ob.cycles.use_motion_blur = False
+                except Exception:
+                    pass
+    return n
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--blend", required=True); ap.add_argument("--out", required=True)
@@ -56,6 +93,8 @@ def main():
     ap.add_argument("--no-persistent", action="store_true",
                     help="rebuild the render scene every frame (persistent data kept the previous shot's data and the "
                          "memory doubled at shot changes: OOM)")
+    ap.add_argument("--part", type=int, default=0); ap.add_argument("--parts", type=int, default=1)
+    ap.add_argument("--done-dir", default=None, help="frames already present here (resumed artifacts) are skipped")
     ap.add_argument("--list-only", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
     t_start = time.time()
@@ -78,6 +117,11 @@ def main():
     sc.render.resolution_percentage = 100
     frames = parse_frames(a.frames) if a.frames else list(range(sc.frame_start, sc.frame_end + 1))
     mine = frames[a.job::a.jobs]
+    if a.parts > 1:                                  # checkpoint parts: contiguous slices of this job's frames
+        k0 = len(mine) * a.part // a.parts; k1 = len(mine) * (a.part + 1) // a.parts
+        mine = mine[k0:k1]
+    if a.done_dir:
+        mine = [f for f in mine if not png_complete(os.path.join(a.done_dir, f"frame_{f:05d}.png"))]
     os.makedirs(a.out, exist_ok=True)
     markers = sorted(sc.timeline_markers, key=lambda m: m.frame)
     timings = []
@@ -98,6 +142,9 @@ def main():
             if m.frame <= f:
                 cam = m.camera
         sc.camera = cam
+        nh = apply_shot_visibility(bpy, cam.name if cam else None)
+        if nh:
+            print(f"[render] {cam.name}: {nh} vegetation instancers not loaded (not visible in this shot)", flush=True)
         sc.frame_set(f)
         dst = os.path.join(a.out, f"frame_{f:05d}.png")
         tmp = os.path.join(a.out, f".tmp_{f:05d}.png")
@@ -127,7 +174,8 @@ def fresh_loop(a, t_start):
         base += ["--samples", str(a.samples)]
     if a.res:
         base += ["--res", a.res]
-    lst = subprocess.run(base + ["--job", str(a.job), "--jobs", str(a.jobs), "--list-only"]
+    lst = subprocess.run(base + ["--job", str(a.job), "--jobs", str(a.jobs), "--part", str(a.part), "--parts", str(a.parts),
+                                 "--list-only"] + (["--done-dir", a.done_dir] if a.done_dir else [])
                          + (["--frames", a.frames] if a.frames else []), capture_output=True, text=True)
     line = [l for l in lst.stdout.splitlines() if l.startswith("TODO")]
     if lst.returncode != 0 or not line:

@@ -132,40 +132,138 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Extra swap (memory headroom for the big v3 scene)
         run: |
-          # on the big temporary disk (/mnt, ~70 GB): a 10 GB file on / (~14 GB free) left no room and runners died without logs
+          date +%s > /tmp/t0
+          # on the big temporary disk (/mnt, ~70 GB): a 10 GB file on / (~14 GB free) left no room
           sudo fallocate -l 16G /mnt/swapextra && sudo chmod 600 /mnt/swapextra && sudo mkswap /mnt/swapextra && sudo swapon /mnt/swapextra || true
-          free -g; df -h / /mnt
-      - name: Render interleaved frames
+          free -g; df -h / /mnt; nproc
+      # checkpoint part 1/4: render a quarter of this job's frames, then upload them at once, so a lost runner
+      # (v3: runners died ~1 h in without logs) costs at most one part; re-runs resume from the uploaded parts
+      - name: Render part 1/4
+        if: ${{ !cancelled() }}
         run: |
-          nproc; lscpu | grep -E "Model name|^CPU\(s\)" || true
-          FR="${{ inputs.frames }}"
-          ARGS=""
-          if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
           set +e
+          FR="${{ inputs.frames }}"; ARGS=""
+          if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
+          EL=$(( ($(date +%s) - $(cat /tmp/t0)) / 60 ))
           ( while true; do echo "[mon] $(date -u +%T) mem $(free -m | awk '/Mem:/{print $3"/"$2" MB"}') swap $(free -m | awk '/Swap:/{print $3"/"$2" MB"}') disk / $(df -h / | awk 'NR==2{print $4" free"}') /mnt $(df -h /mnt | awk 'NR==2{print $4" free"}')"; sleep 120; done ) &
           MON=$!
-          python tools/render_frames.py --blend build/scene.blend --out frames --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} \
-            --deadline-min 335 --timing frames/timing_${{ matrix.job }}.json --fresh --batch 1 $ARGS
-          RC=$?
+          # lower priority: the runner agent must always get CPU for its heartbeats
+          nice -n 10 python tools/render_frames.py --blend build/scene.blend --out frames_p0 --done-dir frames \
+            --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} --part 0 --parts 4 \
+            --deadline-min $((335 - EL)) --timing frames_p0/timing_${{ matrix.job }}_0.json --fresh --batch 1 $ARGS
           kill $MON 2>/dev/null
-          exit $RC
-      - name: Timing summary
-        if: always()
-        run: |
-          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import json, glob
-          for f in glob.glob("frames/timing_*.json"):
-              d = json.load(open(f)); s = d["seconds"]
-              if s:
-                  print(f"job {d['job']}: {len(s)} frames, mean {sum(s)/len(s):.1f} s/frame, max {max(s):.1f} s, total {d['total_min']:.1f} min, {d['res']} @ {d['samples']} spp")
-          PY
+          exit 0
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ !cancelled() }}
         with:
-          name: frames-${{ matrix.job }}-a${{ github.run_attempt }}
-          path: frames
+          name: frames-${{ matrix.job }}-a${{ github.run_attempt }}-p0
+          path: frames_p0
           retention-days: 7
           compression-level: 0
+          if-no-files-found: ignore
+      # checkpoint part 2/4: render a quarter of this job's frames, then upload them at once, so a lost runner
+      # (v3: runners died ~1 h in without logs) costs at most one part; re-runs resume from the uploaded parts
+      - name: Render part 2/4
+        if: ${{ !cancelled() }}
+        run: |
+          set +e
+          FR="${{ inputs.frames }}"; ARGS=""
+          if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
+          EL=$(( ($(date +%s) - $(cat /tmp/t0)) / 60 ))
+          ( while true; do echo "[mon] $(date -u +%T) mem $(free -m | awk '/Mem:/{print $3"/"$2" MB"}') swap $(free -m | awk '/Swap:/{print $3"/"$2" MB"}') disk / $(df -h / | awk 'NR==2{print $4" free"}') /mnt $(df -h /mnt | awk 'NR==2{print $4" free"}')"; sleep 120; done ) &
+          MON=$!
+          # lower priority: the runner agent must always get CPU for its heartbeats
+          nice -n 10 python tools/render_frames.py --blend build/scene.blend --out frames_p1 --done-dir frames \
+            --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} --part 1 --parts 4 \
+            --deadline-min $((335 - EL)) --timing frames_p1/timing_${{ matrix.job }}_1.json --fresh --batch 1 $ARGS
+          kill $MON 2>/dev/null
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: frames-${{ matrix.job }}-a${{ github.run_attempt }}-p1
+          path: frames_p1
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: ignore
+      # checkpoint part 3/4: render a quarter of this job's frames, then upload them at once, so a lost runner
+      # (v3: runners died ~1 h in without logs) costs at most one part; re-runs resume from the uploaded parts
+      - name: Render part 3/4
+        if: ${{ !cancelled() }}
+        run: |
+          set +e
+          FR="${{ inputs.frames }}"; ARGS=""
+          if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
+          EL=$(( ($(date +%s) - $(cat /tmp/t0)) / 60 ))
+          ( while true; do echo "[mon] $(date -u +%T) mem $(free -m | awk '/Mem:/{print $3"/"$2" MB"}') swap $(free -m | awk '/Swap:/{print $3"/"$2" MB"}') disk / $(df -h / | awk 'NR==2{print $4" free"}') /mnt $(df -h /mnt | awk 'NR==2{print $4" free"}')"; sleep 120; done ) &
+          MON=$!
+          # lower priority: the runner agent must always get CPU for its heartbeats
+          nice -n 10 python tools/render_frames.py --blend build/scene.blend --out frames_p2 --done-dir frames \
+            --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} --part 2 --parts 4 \
+            --deadline-min $((335 - EL)) --timing frames_p2/timing_${{ matrix.job }}_2.json --fresh --batch 1 $ARGS
+          kill $MON 2>/dev/null
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: frames-${{ matrix.job }}-a${{ github.run_attempt }}-p2
+          path: frames_p2
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: ignore
+      # checkpoint part 4/4: render a quarter of this job's frames, then upload them at once, so a lost runner
+      # (v3: runners died ~1 h in without logs) costs at most one part; re-runs resume from the uploaded parts
+      - name: Render part 4/4
+        if: ${{ !cancelled() }}
+        run: |
+          set +e
+          FR="${{ inputs.frames }}"; ARGS=""
+          if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
+          EL=$(( ($(date +%s) - $(cat /tmp/t0)) / 60 ))
+          ( while true; do echo "[mon] $(date -u +%T) mem $(free -m | awk '/Mem:/{print $3"/"$2" MB"}') swap $(free -m | awk '/Swap:/{print $3"/"$2" MB"}') disk / $(df -h / | awk 'NR==2{print $4" free"}') /mnt $(df -h /mnt | awk 'NR==2{print $4" free"}')"; sleep 120; done ) &
+          MON=$!
+          # lower priority: the runner agent must always get CPU for its heartbeats
+          nice -n 10 python tools/render_frames.py --blend build/scene.blend --out frames_p3 --done-dir frames \
+            --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} --part 3 --parts 4 \
+            --deadline-min $((335 - EL)) --timing frames_p3/timing_${{ matrix.job }}_3.json --fresh --batch 1 $ARGS
+          kill $MON 2>/dev/null
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: frames-${{ matrix.job }}-a${{ github.run_attempt }}-p3
+          path: frames_p3
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: ignore
+      - name: All frames of this job present? (fails the job if not, so 're-run failed jobs' resumes it)
+        run: |
+          python - <<'PY'
+          import glob, json, os, sys
+          sys.path.insert(0, "tools")
+          from render_frames import png_complete
+          have = set()
+          for d in ["frames"] + sorted(glob.glob("frames_p*")):
+              for f in glob.glob(os.path.join(d, "frame_*.png")):
+                  if png_complete(f):
+                      have.add(os.path.basename(f))
+          for f in glob.glob("frames_p*/timing_*.json"):
+              d = json.load(open(f)); s = d.get("seconds") or []
+              if s:
+                  print(f"part {f}: {len(s)} frames, mean {sum(s)/len(s):.0f} s/frame incl. scene load")
+          print(f"{len(have)} complete frames on this runner")
+          PY
+          python tools/render_frames.py --blend build/scene.blend --out frames --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} --list-only > /tmp/todo.txt 2>/dev/null || true
+          python - <<'PY'
+          import glob, os, sys
+          sys.path.insert(0, "tools")
+          from render_frames import png_complete
+          line = [l for l in open("/tmp/todo.txt") if l.startswith("TODO")]
+          todo = [int(x) for x in line[0][5:].split(",") if x.strip()] if line else []
+          missing = [f for f in todo if not any(png_complete(os.path.join(d, f"frame_{f:05d}.png")) for d in glob.glob("frames_p*"))]
+          print(f"missing frames for this job: {len(missing)} {missing[:20]}")
+          sys.exit(1 if missing or not line else 0)
+          PY
 
   encode:
     needs: [build, render]

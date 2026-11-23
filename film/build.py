@@ -129,6 +129,39 @@ def key_grass_wake(shots):
         bl.set_keys(ob, bl.modifier_input(md, "Tail S").path_from_id("value"), 0, frames, heads - S.TRAIN_LENGTH)
 
 
+def eight_bit_textures(texdir):
+    """(v3) 16-bit PNG textures (normal / roughness / displacement maps, leaf cards) are held as 32-bit float in
+    Blender and again in the render: 93 images = 2.3 GB + the render copy. 8 bits are plenty for these at 1080p/4K.
+    The HDR sky stays float. Converted copies go to texdir/8bit and the images are re-pointed before packing."""
+    from PIL import Image
+    out_dir = os.path.join(texdir, "8bit"); os.makedirs(out_dir, exist_ok=True)
+    n, saved = 0, 0
+    for im in list(bpy.data.images):
+        if im.source != "FILE" or not im.filepath:
+            continue
+        src = bpy.path.abspath(im.filepath, library=im.library)
+        if not src.lower().endswith(".png") or not os.path.exists(src):
+            continue
+        try:
+            if not im.is_float:
+                continue
+            with Image.open(src) as pim:
+                if pim.mode.startswith("I"):
+                    arr = np.asarray(pim, dtype=np.uint32)
+                    out = Image.fromarray((arr >> 8).astype(np.uint8), "L")
+                else:
+                    out = pim.convert(pim.mode if pim.mode in ("RGB", "RGBA", "L", "LA") else "RGBA")
+                dst = os.path.join(out_dir, os.path.basename(src))
+                out.save(dst)
+            w, h = im.size
+            im.filepath = dst
+            im.reload()
+            n += 1; saved += w * h * 12
+        except Exception as e:                       # keep the original on any problem
+            print("[build]   8-bit conversion skipped", im.name, e, flush=True)
+    return f"{n} images, ~{saved / 1e9:.2f} GB less per copy"
+
+
 def _fcurves(action):
     try:
         return list(action.fcurves)
@@ -391,6 +424,7 @@ def build(assets, out, quality="preview", veg=True, texdir=None, only_shots=None
     W.key_sun_per_shot(sc, sun, SKY_SUN, [(f0, SUN_AZ.get(sh.name[:2])) for sh, f0, f1 in SH.timeline(shots)], 260.3)
     sc.render.film_transparent = False
     bpy.ops.file.make_paths_relative() if False else None
+    log("8-bit textures:", eight_bit_textures(texdir))
     if pack:
         log("packing all images into the .blend")
         bpy.ops.file.pack_all()
