@@ -16,8 +16,10 @@ Weathering is in the shaders (object space, so every instance keeps it): damp da
 streaks running down from the copings, black soot above the doorway from decades of incense, algae in the
 pan-tile channels near the eaves, black mould on the lime plaster, faded and torn paper.
 
+Grime packed into corners (local AO) and worn arrises (bevel-normal edge mask) on the masonry and plaster.
+
 Everything is one mesh built with the village `MB` builder (plus per-face attributes for the shaders and UVs
-for the paper); about 13k faces, 8 materials.
+for the paper); about 8.6k faces (17k triangles), 7 materials.
 """
 import math
 import os
@@ -285,12 +287,12 @@ def _ridge(sb, M, rng):
     pl = M["plaster"]
     zb = Z_R + 0.06                                                        # top of the bed
     bed = [(-0.16, -0.05), (0.16, -0.05), (0.10, 0.025), (0.068, 0.06), (-0.068, 0.06), (-0.10, 0.025)]
-    with sb.st(grime=0.6):
+    with sb.st(grime=0.78):
         sb.sweep([(-HW + 0.03, Y_R, Z_R), (HW - 0.03, Y_R, Z_R)], bed, pl)
     # tiles on edge, leaning 28 deg towards the middle, between the ornament and the ridge ends
     XT, H, lean = 0.53, 0.095, math.radians(28)
     for sx in (-1, 1):
-        for x in np.arange(0.085, XT, 0.026):
+        for x in np.arange(0.085, XT, 0.019):
             xc = sx * (x + rng.normal(0, 0.002))
             ph = lean + rng.normal(0, 0.05)
             up = np.array([-sx * math.sin(ph), 0.0, math.cos(ph)])
@@ -413,7 +415,7 @@ def _stonework_(sb, M, rng):
             dz = rng.normal(0, 0.004, 4)
             x0, x1 = xs[i] + (0.004 if i else 0), xs[i + 1] - (0.004 if i < 2 else 0)
             y0, y1 = ys[j] + (0.004 if j else 0), ys[j + 1] - (0.004 if j < 1 else 0.0)
-            with sb.st(grime=0.25 + 0.25 * rng.random(), tvar=rng.random()):
+            with sb.st(grime=0.08 + 0.15 * rng.random(), tvar=rng.random()):
                 sb.hexa([(x0, y0, -0.25), (x1, y0, -0.25), (x1, y1, -0.25), (x0, y1, -0.25),
                          (x0, y0, z + dz[0]), (x1, y0, z + dz[1]), (x1, y1, z + dz[2]), (x0, y1, z + dz[3])], st)
     # granite door frame: sill (offering ledge), jambs, lintel
@@ -640,11 +642,13 @@ def _surface_z(x, y):
 def _debris(sb, M, rng):
     """Firecracker shells, burnt red paper and a black ash patch where paper money was burnt."""
     sm = M["smalls"]
-    ax, ay = 1.32, 0.42                                                         # ash patch beside the apron
-    a = np.linspace(0, 2 * math.pi, 22, endpoint=False)
-    rr = 0.27 * (1 + 0.25 * np.sin(3 * a + 1) + 0.15 * rng.normal(size=a.size))
-    with sb.st(col=(0.022, 0.02, 0.019), rgh=0.95):
-        sb.poly([(ax + r * math.cos(t), ay + 0.8 * r * math.sin(t), 0.004) for r, t in zip(rr, a)], sm)
+    ax, ay = -1.32, 0.30                                                        # ash patch beside the apron
+    a = np.linspace(0, 2 * math.pi, 36, endpoint=False)
+    rr = 0.24 * (1 + 0.22 * np.sin(3 * a + 1) + 0.12 * np.sin(7 * a) + 0.1 * rng.normal(size=a.size))
+    with sb.st(col=(0.045, 0.042, 0.04), rgh=0.97):
+        sb.poly([(ax + r * math.cos(t), ay + 0.8 * r * math.sin(t), 0.003) for r, t in zip(rr, a)], sm)
+    with sb.st(col=(0.20, 0.195, 0.185), rgh=0.97):                             # pale ash heaped in the middle
+        sb.poly([(ax + 0.45 * r * math.cos(t) + 0.03, ay + 0.35 * r * math.sin(t), 0.006) for r, t in zip(rr[::-1], a[::-1])], sm)
     def scrap(x, y, z, size, col, rgh=0.8):
         t = rng.uniform(0, math.pi)
         c, s_ = math.cos(t), math.sin(t)
@@ -657,14 +661,14 @@ def _debris(sb, M, rng):
     def red():
         f = rng.random()
         return (0.38 + 0.15 * f, 0.02 + 0.08 * f, 0.02 + 0.05 * f)
-    for k in range(85):                                                         # scraps on the apron and round it
-        if k < 30:
-            x, y = ax + rng.normal(0, 0.16), ay + rng.normal(0, 0.12)
-            col = [(0.02, 0.018, 0.017), (0.30, 0.29, 0.27), (0.42, 0.32, 0.12)][int(rng.choice(3, p=[0.45, 0.35, 0.2]))]
+    for k in range(95):                                                         # scraps on the apron and round it
+        if k < 40:
+            x, y = ax + rng.normal(0, 0.15), ay + rng.normal(0, 0.11)
+            col = [(0.02, 0.018, 0.017), (0.34, 0.33, 0.31), (0.42, 0.32, 0.12)][int(rng.choice(3, p=[0.4, 0.4, 0.2]))]
         else:
             x, y = rng.normal(0, 0.55), rng.uniform(-0.35, APRON_Y + 0.05)
             col = red() if rng.random() < 0.7 else (0.025, 0.022, 0.02)
-        scrap(x, y, _surface_z(x, y) + 0.001, rng.uniform(0.006, 0.02), col)
+        scrap(x, y, _surface_z(x, y) + 0.007, rng.uniform(0.006, 0.022), col)
     for k in range(32):                                                         # firecracker shells
         x, y = rng.normal(0.0, 0.5), rng.uniform(-0.4, APRON_Y)
         z = _surface_z(x, y)
@@ -864,6 +868,19 @@ class _G:
     def attr(self, name, out="Factor"):
         return self.n("ShaderNodeAttribute", attribute_type="GEOMETRY", attribute_name=name).outputs[out]
 
+    def ao(self, dist, samples=8):
+        """1 in the open, towards 0 in crevices (this object only)."""
+        return self.n("ShaderNodeAmbientOcclusion", {"Distance": dist}, samples=samples, only_local=True).outputs["AO"]
+
+    def edge(self, radius):
+        """~1 within `radius` of a convex or concave edge (bevel normal vs true normal)."""
+        bv = self.n("ShaderNodeBevel", {"Radius": radius}, samples=4)
+        geo = self.n("ShaderNodeNewGeometry")
+        dp = self.n("ShaderNodeVectorMath", operation="DOT_PRODUCT")
+        self.nt.links.new(bv.outputs[0], dp.inputs[0])
+        self.nt.links.new(geo.outputs["Normal"], dp.inputs[1])
+        return self.ramp(self.math("SUBTRACT", 1.0, dp.outputs["Value"]), 0.02, 0.12)
+
     def coords(self):
         tc = self.n("ShaderNodeTexCoord")
         oi = self.n("ShaderNodeObjectInfo")
@@ -913,6 +930,16 @@ def _soot(g, co, cot, z0=Z_LINTEL - 0.05):
     return g.math("MULTIPLY", g.math("MULTIPLY", gx, gz), g.math("MULTIPLY", fy, g.math("MULTIPLY_ADD", ns, 0.9, 0.35)), clamp=True)
 
 
+def _wear(g, col, cot, ao_dist, chip):
+    """Grime packed into corners and crevices (local AO) and worn, paler arrises (edge mask x noise)."""
+    dirt = g.ramp(g.ao(ao_dist), 0.85, 0.3)
+    col = g.mix(g.math("MULTIPLY", dirt, 0.65), col, g.mix(1.0, col, (0.42, 0.40, 0.36), "MULTIPLY"))
+    if chip != 1.0:
+        e = g.math("MULTIPLY", g.edge(0.012), g.ramp(g.noise(cot, 18.0, detail=4.0), 0.45, 0.6))
+        col = g.mix(g.math("MULTIPLY", e, 0.8), col, g.mix(1.0, col, (chip, chip, chip * 0.97), "MULTIPLY"))
+    return col
+
+
 def _bump(g, p, height, strength, dist, bevel=0.0):
     b = g.n("ShaderNodeBump", {"Strength": strength, "Distance": dist})
     g._in(b.inputs["Height"], height)
@@ -954,6 +981,7 @@ def _mat_brick(tex):
     # rain streaks from the copings and corbels
     st = _streaks(g, cot, 0.25, 1.6)
     col = g.mix(g.math("MULTIPLY", st, 0.75), col, g.mix(1.0, col, (0.38, 0.40, 0.37), "MULTIPLY"))
+    col = _wear(g, col, cot, 0.18, 1.35)
     # soot from the incense: above the doorway and inside its reveals, fading up the wall
     soot = g.math("ADD", _soot(g, co, cot), g.attr("grime"), clamp=True)
     col = g.mix(g.math("MULTIPLY", soot, 0.92), col, (0.014, 0.012, 0.011))
@@ -987,6 +1015,8 @@ def _mat_tile(tex):
     # pale dusty lichen crusts on the cover ridges
     nl = g.ramp(g.noise(cot, 22.0, detail=3.0), 0.66, 0.72)
     col = g.mix(g.math("MULTIPLY", nl, g.math("SUBTRACT", 1.0, gr)), col, (0.20, 0.20, 0.17))
+    dirt = g.ramp(g.ao(0.035, 6), 0.9, 0.35)
+    col = g.mix(g.math("MULTIPLY", dirt, 0.7), col, g.mix(1.0, col, (0.45, 0.43, 0.40), "MULTIPLY"))
     g._in(p.inputs["Base Color"], col)
     g._in(p.inputs["Roughness"], g.math("MULTIPLY_ADD", alg, -0.12, 0.88))
     g._in(p.inputs["Specular IOR Level"], 0.32)
@@ -1010,6 +1040,7 @@ def _mat_plaster(tex):
     col = g.mix(g.math("MULTIPLY", mould, 0.92), col, (0.04, 0.042, 0.036))   # black mould on the lime
     st = _streaks(g, cot, 0.3, 2.2)
     col = g.mix(g.math("MULTIPLY", st, 0.5), col, g.mix(1.0, col, (0.35, 0.36, 0.34), "MULTIPLY"))
+    col = _wear(g, col, cot, 0.12, 1.0)
     soot = g.ramp(gr, 0.6, 1.0)
     col = g.mix(g.math("MULTIPLY", soot, g.math("MULTIPLY_ADD", g.noise(cot, 3.0), 0.4, 0.75), clamp=True), col, (0.016, 0.014, 0.012))
     g._in(p.inputs["Base Color"], col)
@@ -1044,12 +1075,13 @@ def _mat_stone(tex):
     col = g.mix(g.math("MULTIPLY", drip, 0.75), col, g.mix(1.0, col, (0.35, 0.38, 0.30), "MULTIPLY"))
     dust = g.math("MULTIPLY", up, g.ramp(g.noise(cot, 2.5, detail=5.0), 0.4, 0.7))
     col = g.mix(g.math("MULTIPLY", dust, 0.45), col, (0.13, 0.11, 0.085))       # dust and soil tracked onto the slabs
-    ground = g.math("SUBTRACT", 1.0, g.ramp(z, -0.02, 0.2))                    # soil splash at the foot
+    ground = g.math("MULTIPLY", g.math("SUBTRACT", 1.0, g.ramp(z, -0.02, 0.2)), g.math("SUBTRACT", 1.0, up))   # soil splash at the foot
     col = g.mix(g.math("MULTIPLY", ground, 0.7), col, (0.06, 0.05, 0.037))
     nd = g.noise(cot, 4.0, detail=5.0)
     col = g.mix(g.math("MULTIPLY", gr, g.ramp(nd, 0.25, 0.6), clamp=True), col, (0.03, 0.026, 0.022))   # wax, soot, wet
     moss = g.math("MULTIPLY", ground, g.ramp(g.noise(cot, 14.0, detail=6.0), 0.48, 0.62))
     col = g.mix(moss, col, (0.022, 0.032, 0.010))
+    col = _wear(g, col, cot, 0.2, 1.3)
     jt = None                                                                   # granite block joints on the plinth
     for (c, pos) in ((x, -0.47), (x, 0.08), (x, 0.61), (y, 1.02), (y, 1.5)):
         j = g.math("SUBTRACT", 1.0, g.ramp(g.math("ABSOLUTE", g.math("SUBTRACT", c, pos)), 0.002, 0.007))
@@ -1059,7 +1091,7 @@ def _mat_stone(tex):
     col = g.mix(g.math("MULTIPLY", _soot(g, co, cot, Z_LINTEL - 0.25), 0.85), col, (0.016, 0.014, 0.012))
     g._in(p.inputs["Base Color"], col)
     r = g.img(f"{tex}/concrete_wall_008/concrete_wall_008_rough_2k.jpg", cot, 1.6, noncolor=True)
-    g._in(p.inputs["Roughness"], g.math("MULTIPLY_ADD", g.bw(r), 0.3, 0.62, clamp=True))
+    g._in(p.inputs["Roughness"], g.math("MULTIPLY_ADD", g.bw(r), 0.25, 0.72, clamp=True))
     _bump(g, p, g.math("SUBTRACT", g.math("ADD", lum, g.math("MULTIPLY", sp, 0.3)), g.math("MULTIPLY", jt, 2.0)), 0.35, 0.006,
           bevel=0.01)
     return m

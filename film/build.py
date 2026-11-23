@@ -720,7 +720,21 @@ def build_vegetation(coll, assets, towers, scale=1.0):
     U, Vv = np.meshgrid(np.arange(-40, 40, 0.25), np.arange(-40, 40, 0.30))
     SX, SY = c2[0] + U.ravel(), c2[1] + Vv.ravel()
     sd = side(SX, SY); fdist = (SX - c2[0]) * fwd[0] + (SY - c2[1]) * fwd[1]
+    # (v3) story element: a village earth-god shrine (tudi miao) on the harvested side of the bund, left of the
+    # viaduct, facing the field path and the camera at three-quarters - incense burning, red couplets
+    from . import shrine as SHR
+    fs_, ls_ = 27.5, 6.5
+    d_ = b1 - b0; nrm_ = np.array([d_[1], -d_[0]]) / np.linalg.norm(d_)
+    fs_, ls_ = fs_ + nrm_[0] * 1.2, ls_ + nrm_[1] * 1.2                # just beyond the bund grass
+    shx, shy = to_xy(fs_, ls_)
+    shz = float(W.natural_ground(np.array([shx]), np.array([shy]))[0])
+    sh_head = math.atan2(c2[1] - shy, c2[0] - shx) - math.radians(24.0)
+    SHR.earth_god_shrine(coll, shx, shy, shz, sh_head, np.random.default_rng(8), assets=assets)
+    bx_, by_ = shx - math.cos(sh_head) * 1.4, shy - math.sin(sh_head) * 1.4      # body centre, behind the apron
+    PR.KEEPOUT.append((bx_, by_, 3.0))
+    log("  earth-god shrine at", round(shx, 1), round(shy, 1), round(shz, 2))
     ks = (sd > 0.6) & (fdist > 2) & (np.hypot(SX - c2[0], SY - c2[1]) < 40) & (rng.random(len(SX)) < 0.55)
+    ks &= np.hypot(SX - bx_, SY - by_) > 2.6
     if clumps and ks.any():
         SZ = W.natural_ground(SX[ks], SY[ks]) - 0.02
         W.scatter_tree("VegS2Stubble", coll, np.column_stack([SX[ks], SY[ks], SZ]), clumps, (0.18, 0.26), 14, wind=0.0)
