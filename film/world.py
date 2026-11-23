@@ -335,11 +335,67 @@ def terrain_material(tex, paddy_img):
     L(forest.outputs["Color"], canopy.inputs["A"]); L(canopy.outputs["Result"], hill.inputs["B"])
     rk = nt.nodes.new("ShaderNodeMix"); rk.data_type = "RGBA"
     L(slope.outputs[0], rk.inputs["Factor"]); L(hill.outputs["Result"], rk.inputs["A"]); L(rock.outputs["Color"], rk.inputs["B"])
+    # (v3) field surface structure, oriented per field (direction map): harvester swaths (2.2 m) on the stubble,
+    # plough furrows (0.33 m) on the ploughed fields, vegetable beds (1.4 m) on the green plots, damp patches.
+    # This directional grain catching the low sun is what makes fields read as real from a drone.
+    dimg = nt.nodes.new("ShaderNodeTexImage"); dimg.interpolation = "Closest"; dimg.extension = "CLIP"
+    dimg.image = bpy.data.images.load(bpy.path.abspath(paddy_img.filepath)[:-4] + "_dir.png", check_existing=True)
+    dimg.image.colorspace_settings.name = "Non-Color"; L(pm.outputs[0], dimg.inputs[0])
+    dsep = nt.nodes.new("ShaderNodeSeparateColor"); L(dimg.outputs["Color"], dsep.inputs[0])
+    def mth(op, a, b=None, c=None, clamp=False):
+        n_ = nt.nodes.new("ShaderNodeMath"); n_.operation = op; n_.use_clamp = clamp
+        for i_, v_ in enumerate((a, b, c)):
+            if v_ is None:
+                continue
+            if isinstance(v_, (int, float)):
+                n_.inputs[i_].default_value = v_
+            else:
+                L(v_, n_.inputs[i_])
+        return n_.outputs[0]
+    ca_ = mth("MULTIPLY_ADD", dsep.outputs[0], 2.0, -1.0); sa_ = mth("MULTIPLY_ADD", dsep.outputs[1], 2.0, -1.0)
+    vcoord = mth("SUBTRACT", mth("MULTIPLY", sep.outputs["Y"], ca_), mth("MULTIPLY", sep.outputs["X"], sa_))   # across the rows (m)
+    phase = dsep.outputs[2]
+    def wave(period, ph=None):
+        x_ = mth("DIVIDE", vcoord, period)
+        if ph is not None:
+            x_ = mth("ADD", x_, ph)
+        return mth("MULTIPLY_ADD", mth("SINE", mth("MULTIPLY", x_, 2 * math.pi)), 0.5, 0.5)
+    swath = wave(4.4, phase)
+    furrow = wave(0.33)
+    beds = wave(1.4, phase)
+    bed = nt.nodes.new("ShaderNodeMapRange"); bed.inputs[1].default_value = 0.35; bed.inputs[2].default_value = 0.6
+    L(beds, bed.inputs[0]); bed = bed.outputs[0]
+    is_green = mth("SUBTRACT", mth("SUBTRACT", mth("SUBTRACT", 1.0, is_ripe), water), is_fallow, clamp=True)
+    # damp, darker hollows in the stubble (5-20 m)
+    wetn = nt.nodes.new("ShaderNodeTexNoise"); wetn.inputs["Scale"].default_value = 0.09; wetn.inputs["Detail"].default_value = 4
+    L(geo.outputs["Position"], wetn.inputs["Vector"])
+    wet = nt.nodes.new("ShaderNodeMapRange"); wet.inputs[1].default_value = 0.60; wet.inputs[2].default_value = 0.70
+    L(wetn.outputs["Fac"], wet.inputs[0]); wet = wet.outputs[0]
+    # albedo multipliers per type
+    m_stub = mth("MULTIPLY", mth("MULTIPLY_ADD", swath, 0.30, 0.82), mth("MULTIPLY_ADD", wet, -0.40, 1.0))
+    m_plough = mth("MULTIPLY", mth("MULTIPLY_ADD", furrow, 0.38, 0.68), mth("MULTIPLY_ADD", swath, 0.12, 0.94))
+    mult = mth("ADD", mth("ADD", 1.0, mth("MULTIPLY", is_ripe, mth("SUBTRACT", m_stub, 1.0))),
+               mth("MULTIPLY", is_fallow, mth("SUBTRACT", m_plough, 1.0)))
+    fpat = nt.nodes.new("ShaderNodeMix"); fpat.data_type = "RGBA"; fpat.blend_type = "MULTIPLY"; fpat.inputs["Factor"].default_value = 1.0
+    L(ricem.outputs["Result"], fpat.inputs["A"])
+    mcomb = nt.nodes.new("ShaderNodeCombineColor"); [L(mult, mcomb.inputs[i_]) for i_ in range(3)]
+    L(mcomb.outputs[0], fpat.inputs["B"])
+    # green plots: crop beds with bare soil paths between them
+    soil = nt.nodes.new("ShaderNodeMix"); soil.data_type = "RGBA"; soil.blend_type = "MULTIPLY"; soil.inputs["Factor"].default_value = 1.0
+    L(mud.outputs["Color"], soil.inputs["A"]); soil.inputs["B"].default_value = (0.75, 0.62, 0.50, 1)
+    gbed = nt.nodes.new("ShaderNodeMix"); gbed.data_type = "RGBA"
+    L(mth("MULTIPLY", is_green, mth("SUBTRACT", 1.0, bed)), gbed.inputs["Factor"])
+    L(fpat.outputs["Result"], gbed.inputs["A"]); L(soil.outputs["Result"], gbed.inputs["B"])
+    # relief (into the bump): furrows, bed ridges, swath straw
+    relief = mth("ADD", mth("ADD", mth("MULTIPLY", is_fallow, mth("MULTIPLY", furrow, 0.9)),
+                         mth("MULTIPLY", is_green, mth("MULTIPLY", bed, 0.7))),
+                 mth("MULTIPLY", is_ripe, mth("MULTIPLY", swath, 0.25)))
+    relief = mth("MULTIPLY", mth("MULTIPLY", relief, pz2.outputs[0] if hasattr(pz2, "outputs") else pz2), mth("SUBTRACT", 1.0, dike))
     # paddy: rice vs water vs dikes
     pad = nt.nodes.new("ShaderNodeMix"); pad.data_type = "RGBA"
     dk = nt.nodes.new("ShaderNodeMath"); dk.operation = "POWER"; dk.inputs[1].default_value = 0.6; L(dike, dk.inputs[0])
     pad.inputs["B"].default_value = (0.13, 0.17, 0.06, 1)
-    L(dk.outputs[0], pad.inputs["Factor"]); L(ricem.outputs["Result"], pad.inputs["A"])
+    L(dk.outputs[0], pad.inputs["Factor"]); L(gbed.outputs["Result"], pad.inputs["A"])
     allc = nt.nodes.new("ShaderNodeMix"); allc.data_type = "RGBA"
     L(pz2.outputs[0], allc.inputs["Factor"]); L(rk.outputs["Result"], allc.inputs["A"]); L(pad.outputs["Result"], allc.inputs["B"])
     # diamond lattice concrete frames (slope protection) on cut slopes: uses UV = (chainage, lateral)
@@ -384,7 +440,8 @@ def terrain_material(tex, paddy_img):
     bh2 = nt.nodes.new("ShaderNodeMath"); bh2.operation = "MULTIPLY_ADD"; bh2.inputs[1].default_value = 1.0
     L(bh.outputs[0], bh2.inputs[0]); L(lm.outputs[0], bh2.inputs[2])
     bbump = nt.nodes.new("ShaderNodeBump"); bbump.inputs["Strength"].default_value = 0.8; bbump.inputs["Distance"].default_value = 0.35
-    L(bh2.outputs[0], bbump.inputs["Height"]); L(nm.outputs[0], bbump.inputs["Normal"]); L(bbump.outputs[0], p.inputs["Normal"])
+    hsum = nt.nodes.new("ShaderNodeMath"); hsum.operation = "ADD"; L(bh2.outputs[0], hsum.inputs[0]); L(relief, hsum.inputs[1])
+    L(hsum.outputs[0], bbump.inputs["Height"]); L(nm.outputs[0], bbump.inputs["Normal"]); L(bbump.outputs[0], p.inputs["Normal"])
     # water in flooded paddies: mirror-like with slight ripples, muddy tint
     wat = nt.nodes.new("ShaderNodeBsdfPrincipled")
     wat.inputs["Base Color"].default_value = (0.04, 0.05, 0.025, 1); wat.inputs["Roughness"].default_value = 0.07   # still: mirrors sky + karst
@@ -473,6 +530,7 @@ def paddy_image(path, res=1.0, seed=3, force_green=()):
     bang = rng.normal(np.radians(8), np.radians(25), nb)
     bw = rng.uniform(10, 28, nb); bl = rng.uniform(25, 70, nb)
     R = np.zeros((H, W), np.uint8); G = np.zeros((H, W), np.uint8); B = np.zeros((H, W), np.uint8)
+    DR = np.zeros((H, W), np.uint8); DG = np.zeros((H, W), np.uint8); DB = np.zeros((H, W), np.uint8)
     # (v3) November round Guilin: the late rice is mostly cut - golden stubble, fields ploughed or flooded for the
     # next crop, a few still green (late rice / winter vegetables). Was 74 % green: a summer game-map from the air.
     types = np.array([0.0, 0.33, 0.66, 1.0]); probs = [0.20, 0.46, 0.14, 0.20]
@@ -497,6 +555,9 @@ def paddy_image(path, res=1.0, seed=3, force_green=()):
         R[ys] = (var * 255).reshape(len(ys), W)
         B[ys] = (types[np.clip(tsel, 0, 3)] * 255).reshape(len(ys), W)
         G[ys] = (edge * 255).reshape(len(ys), W)
+        DR[ys] = ((np.cos(bang[b]) * 0.5 + 0.5) * 255).reshape(len(ys), W)     # field row direction (block angle)
+        DG[ys] = ((np.sin(bang[b]) * 0.5 + 0.5) * 255).reshape(len(ys), W)
+        DB[ys] = (((h % 251) / 250.0) * 255).reshape(len(ys), W)              # per-field stripe phase
         for (gx, gy, gr) in force_green:                 # fields round a low camera keep their standing rice
             near = np.hypot(xx * res + PADDY_X0 - gx, yy * res + PADDY_Y0 - gy) < gr
             B[ys] = np.where(near, 0, B[ys])
@@ -504,6 +565,8 @@ def paddy_image(path, res=1.0, seed=3, force_green=()):
     img = Image.merge("RGBA", (Image.fromarray(R), g, Image.fromarray(B), Image.fromarray(np.full((H, W), 255, np.uint8))))
     img = img.transpose(Image.FLIP_TOP_BOTTOM)
     img.save(path)
+    dimg = Image.merge("RGB", (Image.fromarray(DR), Image.fromarray(DG), Image.fromarray(DB))).transpose(Image.FLIP_TOP_BOTTOM)
+    dimg.save(path[:-4] + "_dir.png")
     return path
 
 
