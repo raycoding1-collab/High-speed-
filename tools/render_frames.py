@@ -49,14 +49,24 @@ def main():
     ap.add_argument("--frames", default=None); ap.add_argument("--deadline-min", type=float, default=330)
     ap.add_argument("--timing", default=None); ap.add_argument("--samples", type=int, default=None)
     ap.add_argument("--res", default=None)
+    ap.add_argument("--fresh", action="store_true",
+                    help="render every frame in a fresh Blender process (no memory build-up across frames; v3: runners "
+                         "died ~1 h into the full render, 8 of 20 at once, with persistent data)")
+    ap.add_argument("--batch", type=int, default=4, help="frames per fresh process (scene sync ~2.5 min on 4 cores)")
+    ap.add_argument("--no-persistent", action="store_true",
+                    help="rebuild the render scene every frame (persistent data kept the previous shot's data and the "
+                         "memory doubled at shot changes: OOM)")
+    ap.add_argument("--list-only", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
     t_start = time.time()
+    if a.fresh:
+        return fresh_loop(a, t_start)
     import bpy
     import addon_utils
     bpy.ops.wm.open_mainfile(filepath=os.path.abspath(a.blend))
     addon_utils.enable("cycles", default_set=True)
     sc = bpy.context.scene
-    sc.render.use_persistent_data = True
+    sc.render.use_persistent_data = not a.no_persistent
     sc.render.image_settings.file_format = "PNG"
     sc.render.image_settings.color_mode = "RGB"
     sc.render.image_settings.color_depth = "8"
@@ -72,6 +82,9 @@ def main():
     markers = sorted(sc.timeline_markers, key=lambda m: m.frame)
     timings = []
     todo = [f for f in mine if not png_complete(os.path.join(a.out, f"frame_{f:05d}.png"))]
+    if a.list_only:
+        print("TODO " + ",".join(str(f) for f in todo), flush=True)
+        return
     print(f"[render] job {a.job}/{a.jobs}: {len(mine)} frames assigned, {len(mine) - len(todo)} already done, "
           f"{sc.render.resolution_x}x{sc.render.resolution_y} @ {sc.cycles.samples} spp", flush=True)
     for f in todo:
@@ -103,6 +116,57 @@ def main():
                            samples=sc.cycles.samples, total_min=(time.time() - t_start) / 60), fh, indent=1)
     print(f"[render] job {a.job}: {done}/{len(mine)} frames complete, {(time.time() - t_start) / 60:.1f} min", flush=True)
     sys.exit(0 if done == len(mine) else 3)
+
+
+def fresh_loop(a, t_start):
+    """One child process per frame; this parent never imports bpy."""
+    import subprocess
+    me = os.path.abspath(__file__)
+    base = [sys.executable, me, "--blend", a.blend, "--out", a.out] + (["--no-persistent"] if a.no_persistent else [])
+    if a.samples:
+        base += ["--samples", str(a.samples)]
+    if a.res:
+        base += ["--res", a.res]
+    lst = subprocess.run(base + ["--job", str(a.job), "--jobs", str(a.jobs), "--list-only"]
+                         + (["--frames", a.frames] if a.frames else []), capture_output=True, text=True)
+    line = [l for l in lst.stdout.splitlines() if l.startswith("TODO")]
+    if lst.returncode != 0 or not line:
+        print(lst.stdout[-2000:], lst.stderr[-2000:], flush=True)
+        sys.exit(2)
+    todo = [int(x) for x in line[0][5:].split(",") if x.strip()]
+    print(f"[render] job {a.job}/{a.jobs} (fresh process per frame): {len(todo)} frames to render", flush=True)
+    os.makedirs(a.out, exist_ok=True)
+    done_f, secs = [], []
+    batches = [todo[i:i + max(1, a.batch)] for i in range(0, len(todo), max(1, a.batch))]
+    for bt in batches:
+        elapsed = (time.time() - t_start) / 60
+        est = (max(secs) if secs else 0) / 60
+        left = a.deadline_min - elapsed
+        if left < 1.3 * est * len(bt) + 3:
+            print(f"[render] deadline reached after {elapsed:.1f} min; stopping cleanly", flush=True)
+            break
+        t = time.time()
+        r = subprocess.run(base + ["--frames", ",".join(map(str, bt)), "--job", "0", "--jobs", "1",
+                                   "--deadline-min", str(max(5.0, left - 2.0))])
+        dt = (time.time() - t) / len(bt)
+        try:
+            with open("/proc/meminfo") as fh:
+                mem = {l.split(":")[0]: int(l.split()[1]) for l in fh}
+            swap_used = (mem["SwapTotal"] - mem["SwapFree"]) / 1e6
+        except Exception:
+            swap_used = -1
+        ok = [f for f in bt if png_complete(os.path.join(a.out, f"frame_{f:05d}.png"))]
+        done_f += ok; secs += [dt] * len(ok)
+        print(f"[render] batch {bt}: {len(ok)}/{len(bt)} done, {dt:.1f} s/frame incl. scene load (exit {r.returncode}), "
+              f"swap in use {swap_used:.1f} GB", flush=True)
+    if a.timing:
+        with open(a.timing, "w") as fh:
+            json.dump(dict(job=a.job, jobs=a.jobs, frames=done_f, seconds=secs, fresh=True,
+                           total_min=(time.time() - t_start) / 60), fh, indent=1)
+    rest = [f for f in todo if f not in done_f]
+    print(f"[render] job {a.job}: {len(done_f)}/{len(todo)} frames rendered, {len(rest)} left, "
+          f"{(time.time() - t_start) / 60:.1f} min", flush=True)
+    sys.exit(0 if not rest else 3)
 
 
 if __name__ == "__main__":

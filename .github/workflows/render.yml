@@ -141,7 +141,7 @@ jobs:
           ARGS=""
           if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
           python tools/render_frames.py --blend build/scene.blend --out frames --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} \
-            --deadline-min 335 --timing frames/timing_${{ matrix.job }}.json $ARGS
+            --deadline-min 335 --timing frames/timing_${{ matrix.job }}.json --fresh --batch 3 $ARGS
       - name: Timing summary
         if: always()
         run: |
