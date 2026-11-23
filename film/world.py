@@ -185,7 +185,10 @@ def build_terrain(coll, mats):
     cutm = ((nat > V[:, 2] + 0.3) & (np.abs(L2d) > 7.2) & (S2d > A.VIADUCT[1]) & (S2d < A.TUNNEL_S + 5)
             & (V[:, 2] < A.RAIL_Z + 15.0)).astype(np.float32)
     at = strip.data.attributes.new("cutmask", "FLOAT", "POINT"); at.data.foreach_set("value", cutm)
-    cutz = ((nat > V[:, 2] + 0.3) & (np.abs(L2d) > 7.2) & (S2d > A.VIADUCT[1]) & (S2d < A.TUNNEL_S + 30)).astype(np.float32)
+    # (v3) include the 1:1 portal face over the tunnel (|lat| < 7.2): unflagged it fell back to bare limestone and
+    # showed as a pale scar on the hill in the sun
+    cutz = ((nat > V[:, 2] + 0.3) & ((np.abs(L2d) > 7.2) | (S2d > A.TUNNEL_S - 16.0)) & (S2d > A.VIADUCT[1])
+            & (S2d < A.TUNNEL_S + 30)).astype(np.float32)
     az = strip.data.attributes.new("cutzone", "FLOAT", "POINT"); az.data.foreach_set("value", cutz)
     strip.data.materials.append(mats["terrain"])
     return far, strip

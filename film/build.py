@@ -453,7 +453,7 @@ def _sightline_mask(p, clear=9.0):
             continue
         # (v3) the whole shot, not just its first frame: the S8 600 mm lens follows the train for 9 s and a single
         # fir on the rim in front of it blacked out the frame; long lenses keep their full line of sight clear
-        for t in np.linspace(0.0, sh.sim_dur, 5):
+        for t in np.linspace(0.0, sh.sim_dur, 13 if sh.lens >= 100 else 5):     # long lenses pan: sample densely
             c = np.asarray(sh.cam_fn(t)); a = np.asarray(sh.aim_fn(t))
             d = a - c; L = np.linalg.norm(d); d = d / L
             long = sh.lens >= 100
