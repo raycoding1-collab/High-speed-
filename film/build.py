@@ -13,6 +13,7 @@ import numpy as np
 
 from . import alignment as A
 from . import bl, infra, shots as SH, specs as S, train as TR, world as W
+from . import materials as M
 
 PADDY_PATH = [None]
 QUALITY = {
@@ -141,7 +142,7 @@ def _fcurves(action):
 
 
 # exposure per shot (stops), like a camera operator opening up for shots inside the shaded cutting
-SHOT_EXPOSURE = {"S7": 1.0, "S9": 1.2}
+SHOT_EXPOSURE = {"S7": 1.0, "S9": 1.2, "SX": 1.1}
 
 
 def key_shutter(scene, shots, t_fast=1.0 / 2000.0):
@@ -172,6 +173,14 @@ def key_shot_exposure(scene, shots):
     for sh, f0, f1 in SH.timeline(shots):
         scene.view_settings.exposure = SHOT_EXPOSURE.get(sh.name[:2], 0.0)
         scene.view_settings.keyframe_insert("exposure", frame=f0)
+    # the finale fades to black over its last 1.25 s (per-frame keys, so CONSTANT interpolation is fine)
+    sx = [(sh, f0, f1) for sh, f0, f1 in SH.timeline(shots) if sh.name.startswith("SX")]
+    if sx:
+        sh, f0, f1 = sx[0]
+        n = 30
+        for k in range(n + 1):
+            scene.view_settings.exposure = SHOT_EXPOSURE["SX"] - 10.0 * (k / n) ** 1.6
+            scene.view_settings.keyframe_insert("exposure", frame=f1 - n + k)
     if scene.animation_data and scene.animation_data.action:
         for fc in _fcurves(scene.animation_data.action):
             if fc.data_path == "view_settings.exposure":
@@ -179,7 +188,7 @@ def key_shot_exposure(scene, shots):
                     kp.interpolation = "CONSTANT"
 
 
-FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car1", "S9": 60.0}
+FOCUS = {"S1": 760.0, "S2": 45.0, "S3": "Car3", "S4": "Car4", "S5": 120.0, "S6": 9.5, "S7": 4.2, "S8": "Car1", "S9": 60.0, "SX": 80.0}
 
 
 def make_cameras(scene, shots, res):
@@ -381,6 +390,30 @@ def build_tunnel(coll, tex):
     th = A.heading(s_v)
     co[front, 0] += np.cos(th[front]) * shift[front]; co[front, 1] += np.sin(th[front]) * shift[front]
     me.vertices.foreach_set("co", co.ravel()); me.update()
+    # (v3) portal dressing for the finale: granite name plaque on the hood crown (gold characters), a concrete
+    # collar band along the oblique edge, and the row of wall lamps every 25 m fading into the dark
+    from .trainparts import box, setmat
+    import os as _os
+    font = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+    plq = infra._sign_material("TunnelName", "桂 岭 隧 道" if _os.path.exists(font) else "GUILING TUNNEL", (1024, 256),
+                               bg=(22, 22, 24), fg=(214, 176, 92), font=font if _os.path.exists(font) else None, border=True,
+                               texdir=_os.path.join(_os.path.dirname(tex["concrete"]["diff"]), "..", "..", "signs"))
+    O, T, N, U = infra._frames_flat(np.array([A.TUNNEL_S - 5.2]))
+    O, T, N = O[0], T[0], N[0]
+    top = (A.RAIL_Z - 0.9) + 1.2 + R + 0.7
+    pl = infra._plate("TunnelPlaque", 4.6, 1.15, plq, coll)
+    pl.location = tuple(O + np.array([0, 0, top - O[2] + 0.35]))
+    pl.rotation_euler = (0, 0, math.atan2(T[1], T[0]) - math.pi / 2)        # faces the approaching train
+    base_m = infra.concrete("PlaqueBase", tex.get("concrete"), (0.7, 0.69, 0.66), 0.3)
+    b = setmat(box("TunnelPlaqueBase", (0.5, 5.0, 0.4), (0, 0, 0), coll), base_m)
+    b.location = tuple(O + np.array([0, 0, top - O[2] + 0.15])); b.rotation_euler = (0, 0, math.atan2(T[1], T[0]))
+    lamp = M.principled("TunnelLamp", (1.0, 0.85, 0.6), 0.0, 0.3, emission=(1.0, 0.82, 0.55), estrength=40.0)
+    for s_l in np.arange(A.TUNNEL_S + 12, A.TUNNEL_S + 290, 25):
+        Ol, Tl, Nl, Ul = infra._frames_flat(np.array([s_l]))
+        for side in (-1, 1):
+            p_ = Ol[0] + Nl[0] * side * (R - 0.25) + np.array([0, 0, 4.2])
+            lb = setmat(box(f"TunLamp{int(s_l)}_{side}", (0.6, 0.12, 0.12), tuple(p_), coll), lamp)
+            lb.rotation_euler = (0, 0, math.atan2(Tl[0][1], Tl[0][0]))
     # interior lights every 50 m (dim)
     for s in np.arange(A.TUNNEL_S + 40, A.TUNNEL_S + 290, 50):
         ld = bpy.data.lights.new(f"TunLight{s:.0f}", "POINT"); ld.energy = 60; ld.color = (1.0, 0.85, 0.6); ld.shadow_soft_size = 0.2
@@ -554,7 +587,7 @@ def build_vegetation(coll, assets, towers, scale=1.0):
         s_, lat_ = A.nearest_s(p[:, 0], p[:, 1])
         k = (n[:, 2] > 0.45) & (np.abs(lat_) > 28.0) & (W.natural_ground(p[:, 0], p[:, 1]) > 7.0)
         for sh in SH.build_shots():
-            if sh.name[:2] in ("S7", "S9") and sh.cam_fn is not None:
+            if sh.name[:2] in ("S7", "S9", "SX") and sh.cam_fn is not None:
                 c = np.asarray(sh.cam_fn(0.0), float)
                 k &= np.hypot(p[:, 0] - c[0], p[:, 1] - c[1]) > 150.0
         return k & _sightline_mask(p, 6.0)

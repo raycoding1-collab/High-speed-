@@ -172,10 +172,19 @@ def build_shots():
         nose = _rail(min(s_nose - 3.0, A.TUNNEL_S - 12.0), A.track_offset(), 1.8)   # stop tilting before vertical
         w = min(max((t - 1.7) / 0.55, 0.0), 1.0); w = w * w * (3 - 2 * w)
         return base * (1 - w) + nose * w
-    shots.append(Shot("S9_portal", 6.5, 4450 - V * 2.6, 24,
+    shots.append(Shot("S9_portal", 3.2, 4450 - V * 2.6, 24,
                       "On the hill above the portal looking down the cutting: the train races at the lens and dives into the mountain beneath it; cut 2 s after the tail is in",
                       _s9_cam, _s9_aim, fstop=8,
                       ramp=(2.22, 2.50, 0.12, 0.12, 0.20)))   # SHOWSTOPPER 2: 200 fps (12 %), nose 40 -> 10 m from the portal
+    # SX finale (v3): tripod on the far cess 85 m in front of the portal, 28 mm, a slow 0.8 m/s dolly towards the
+    # mouth: the last cars stream past and vanish into the mountain, the wake stirs leaves and dust, the portal
+    # stays dark and still; the film fades out. Continuous in time with S9 (cut 3.2 s after its start).
+    s9_0 = 4450 - V * 2.6
+    def _sx_cam(t):
+        return _rail(A.TUNNEL_S - 85 + 0.8 * t, -5.2, 1.4)
+    shots.append(Shot("SX_portal_end", 5.2, s9_0 + V * 3.2, 28,
+                      "Finale: from the far cess in front of the portal, the last cars disappear into the mountain; the wake settles; fade out",
+                      _sx_cam, lambda t: _rail(A.TUNNEL_S - 2, 0.0, 3.6), fstop=5.6))
     return shots
 
 

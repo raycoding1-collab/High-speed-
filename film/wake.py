@@ -205,6 +205,8 @@ def build_wake_effects(coll, ground_fn):
             traj, kinds = simulate(sh, f0, f1, 900, 800, (60, 6.5), 3, ground_fn)
         elif sh.name.startswith("S9"):
             traj, kinds = simulate(sh, f0, f1, 500, 500, (55, 6.0), 5, ground_fn)
+        elif sh.name.startswith("SX"):
+            traj, kinds = simulate(sh, f0, f1, 700, 600, (60, 6.5), 7, ground_fn)
         else:
             continue
         ob = build_particles(f"Wake_{sh.name}", coll, traj, kinds, f0, mats, cam=np.asarray(sh.cam_fn(0.0)))

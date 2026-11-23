@@ -364,7 +364,7 @@ def master(x, target_lufs=-23.0, tp_db=-1.0):
 
 
 # per-shot fader: peak 400 ms RMS of the train component (dBFS), like a re-recording mixer would set it
-SHOT_PEAK_DB = {"S1": -34, "S2": -21, "S3": -19, "S4": -25, "S5": -27, "S6": -22, "S7": -13, "S8": -33, "S9": -18}
+SHOT_PEAK_DB = {"S1": -34, "S2": -21, "S3": -19, "S4": -25, "S5": -27, "S6": -22, "S7": -13, "S8": -33, "S9": -18, "SX": -19}
 AMB_DB = -41.0
 
 
@@ -401,7 +401,7 @@ def render(out_path, seed=5):
             wn = wind_noise(n, rng, 1.0)
             wind_db = -33.0 if sh.name[:2] in ("S3", "S4") else -47.0
             tr = tr + amb + wn * 10 ** ((wind_db - _rms_db(wn)) / 20)
-        if sh.name.startswith("S9"):
+        if sh.name.startswith("SX"):
             fade = np.clip((sh.dur - np.arange(n) / FS) / 2.5, 0, 1)
             tr = tr * fade
         # stereo: simple panning from source bearing is overkill here; decorrelated wide ambience + centred train
