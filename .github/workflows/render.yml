@@ -189,7 +189,7 @@ jobs:
           Q=${{ inputs.quality }}
           OV=""
           if [ "${{ inputs.overlay }}" = "true" ]; then OV="--overlay build/physics.json"; fi
-          python tools/encode.py --frames frames --first ${{ needs.build.outputs.first }} --last ${{ needs.build.outputs.last }} \
+          python tools/encode.py --frames frames --first ${{ needs.build.outputs.first }} --last ${{ needs.build.outputs.last }} --grain 2.5 \
             --audio build/audio.wav --out out/cr450_${Q}.mp4 --ig out/cr450_${Q}_instagram.mp4 $OV --report out/report_${Q}.json
           cat out/report_${Q}.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

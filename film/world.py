@@ -296,8 +296,8 @@ def terrain_material(tex, paddy_img):
     ricem0 = nt.nodes.new("ShaderNodeMix"); ricem0.data_type = "RGBA"; ricem0.blend_type = "MULTIPLY"; ricem0.inputs["Factor"].default_value = 0.6
     L(fallow.outputs["Result"], ricem0.inputs["A"]); L(riceN.outputs["Color"], ricem0.inputs["B"])
     # uneven growth inside each field (10-50 m patches): darker/lighter, a touch yellower where thinner
-    mott = nt.nodes.new("ShaderNodeTexNoise"); mott.inputs["Scale"].default_value = 0.045; mott.inputs["Detail"].default_value = 4
-    mott.inputs["Roughness"].default_value = 0.6
+    mott = nt.nodes.new("ShaderNodeTexNoise"); mott.inputs["Scale"].default_value = 0.045; mott.inputs["Detail"].default_value = 9
+    mott.inputs["Roughness"].default_value = 0.68          # v3: down to metre-scale variation, not a flat 20 m wash
     L(geo.outputs["Position"], mott.inputs["Vector"])
     mr = nt.nodes.new("ShaderNodeMapRange"); mr.inputs[1].default_value = 0.3; mr.inputs[2].default_value = 0.7
     mr.inputs[3].default_value = 0.72; mr.inputs[4].default_value = 1.25; L(mott.outputs["Fac"], mr.inputs[0])
