@@ -1,7 +1,7 @@
 {
  "main": {
   "file": "cr450_final.mp4",
-  "size_bytes": 90468208,
+  "size_bytes": 90404522,
   "width": 1920,
   "height": 1080,
   "codec": "h264",
@@ -13,12 +13,12 @@
   "duration_s": 71.666667,
   "audio": true,
   "audio_codec": "aac",
-  "bitrate": 10098776,
+  "bitrate": 10091667,
   "ok": true
  },
  "instagram": {
   "file": "cr450_final_instagram.mp4",
-  "size_bytes": 24345589,
+  "size_bytes": 24268784,
   "width": 1920,
   "height": 1080,
   "codec": "h264",
@@ -30,12 +30,12 @@
   "duration_s": 71.666667,
   "audio": true,
   "audio_codec": "aac",
-  "bitrate": 2717647,
+  "bitrate": 2709073,
   "ok": true
  },
  "youtube_4k": {
   "file": "cr450_final_youtube_4k.mp4",
-  "size_bytes": 361378179,
+  "size_bytes": 361315701,
   "width": 3840,
   "height": 2160,
   "codec": "h264",
@@ -47,7 +47,7 @@
   "duration_s": 71.666667,
   "audio": true,
   "audio_codec": "aac",
-  "bitrate": 40339889,
+  "bitrate": 40332915,
   "ok": true
  }
 }
