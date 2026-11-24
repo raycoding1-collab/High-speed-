@@ -1,0 +1,31 @@
+# CR450 film - colour grade v3 (warm golden-hour look), used by: tools/encode.py --grade tools/grade_v3.txt
+# Lines are joined; '#' lines are comments.  n counts from 0 at frame 1 (frame F is n=F-1).
+# 1) per-shot normalisation, one lutrgb per shot enabled on its frame range, in 16-bit RGB:
+#    x -> ((x*G - D)/(1-D))^E_c  (E_c = P*(1+ar) / P / P*(1+ab): exposure via gamma + white balance of near-neutrals)
+#       -> y + K*(smoothstep(y) - y)  (K > 0 more contrast for the flat/hazy shots, K < 0 softer for the harsh ones)
+#    targets: mean luma ~0.38-0.39 (S5 0.33 with its black cab dashboard, S9 0.38, SX 0.37), similar contrast,
+#    neutrals moved 75% toward a slight warm white.
+#    S1: G 1 D 0.04 P 0.787 ar -0.022 ab -0.011 K +0.334
+#    S2: G 1 D 0 P 0.756 ar -0.015 ab -0.017 K +0.114
+#    S3: G 1 D 0.02 P 0.779 ar -0.018 ab -0.004 K +0.336
+#    S4: G 1 D 0.05 P 0.676 ar -0.019 ab -0.040 K +0.500
+#    S5: G 1 D 0 P 0.632 ar -0.055 ab -0.012 K -0.316
+#    S6: G 0.95 D 0 P 0.800 ar -0.007 ab -0.011 K -0.450
+#    S7: G 0.94 D 0 P 0.751 ar -0.021 ab +0.035 K -0.450
+#    S8: G 1 D 0.08 P 0.685 ar -0.013 ab -0.040 K +0.500
+#    S9: G 0.94 D 0 P 0.639 ar +0.020 ab -0.017 K -0.450
+#    SX: G 1 D 0 P 0.586 ar +0.069 ab -0.099 K +0.243
+# 2) global look: gentle S-curve, warm highlights / slightly cool shadows (lightness preserved),
+#    richer reds/oranges and lusher greens (selectivecolor), +12% vibrance.
+format=rgb48le,
+lutrgb=r='st(0\,pow(clip((val/maxval*1-0.04)/0.96\,0\,1)\,0.7696));maxval*clip(ld(0)+0.3344*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*1-0.04)/0.96\,0\,1)\,0.7870));maxval*clip(ld(0)+0.3344*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*1-0.04)/0.96\,0\,1)\,0.7780));maxval*clip(ld(0)+0.3344*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,0\,191)',
+lutrgb=r='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.7444));maxval*clip(ld(0)+0.1136*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.7557));maxval*clip(ld(0)+0.1136*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.7428));maxval*clip(ld(0)+0.1136*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,192\,311)',
+lutrgb=r='st(0\,pow(clip((val/maxval*1-0.02)/0.98\,0\,1)\,0.7652));maxval*clip(ld(0)+0.3361*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*1-0.02)/0.98\,0\,1)\,0.7795));maxval*clip(ld(0)+0.3361*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*1-0.02)/0.98\,0\,1)\,0.7761));maxval*clip(ld(0)+0.3361*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,312\,479)',
+lutrgb=r='st(0\,pow(clip((val/maxval*1-0.05)/0.95\,0\,1)\,0.6634));maxval*clip(ld(0)+0.5000*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*1-0.05)/0.95\,0\,1)\,0.6762));maxval*clip(ld(0)+0.5000*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*1-0.05)/0.95\,0\,1)\,0.6492));maxval*clip(ld(0)+0.5000*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,480\,695)',
+lutrgb=r='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.5971));maxval*clip(ld(0)+-0.3158*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.6317));maxval*clip(ld(0)+-0.3158*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.6240));maxval*clip(ld(0)+-0.3158*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,696\,887)',
+lutrgb=r='st(0\,pow(clip((val/maxval*0.95-0)/1\,0\,1)\,0.7942));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*0.95-0)/1\,0\,1)\,0.8001));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*0.95-0)/1\,0\,1)\,0.7912));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,888\,1007)',
+lutrgb=r='st(0\,pow(clip((val/maxval*0.94-0)/1\,0\,1)\,0.7351));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*0.94-0)/1\,0\,1)\,0.7509));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*0.94-0)/1\,0\,1)\,0.7769));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,1008\,1231)',
+lutrgb=r='st(0\,pow(clip((val/maxval*1-0.08)/0.92\,0\,1)\,0.6765));maxval*clip(ld(0)+0.5000*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*1-0.08)/0.92\,0\,1)\,0.6855));maxval*clip(ld(0)+0.5000*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*1-0.08)/0.92\,0\,1)\,0.6580));maxval*clip(ld(0)+0.5000*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,1232\,1447)',
+lutrgb=r='st(0\,pow(clip((val/maxval*0.94-0)/1\,0\,1)\,0.6512));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*0.94-0)/1\,0\,1)\,0.6387));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*0.94-0)/1\,0\,1)\,0.6281));maxval*clip(ld(0)+-0.4500*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,1448\,1594)',
+lutrgb=r='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.6261));maxval*clip(ld(0)+0.2432*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':g='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.5856));maxval*clip(ld(0)+0.2432*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':b='st(0\,pow(clip((val/maxval*1-0)/1\,0\,1)\,0.5279));maxval*clip(ld(0)+0.2432*(ld(0)*ld(0)*(3-2*ld(0))-ld(0))\,0\,1)':enable='between(n\,1595\,1719)',
+curves=master='0/0 0.1/0.088 0.3/0.285 0.5/0.505 0.7/0.72 0.9/0.905 1/1',colorbalance=rs=-0.02:gs=-0.005:bs=0.035:rm=0.025:gm=0.0:bm=-0.025:rh=0.04:gh=0.008:bh=-0.035:pl=1,selectivecolor=correction_method=relative:reds='0 0.03 0.05 0':yellows='0 0 0.03 0':greens='0.06 -0.06 0.02 0',vibrance=intensity=0.12

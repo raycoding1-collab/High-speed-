@@ -31,6 +31,9 @@ on:
       grain:
         description: "film grain strength for the encode (0 = off)"
         default: "0"
+      grade:
+        description: "optional colour-grade filter chain file passed to encode.py --grade (e.g. tools/grade_v3.txt; empty = ungraded)"
+        default: ""
 
 permissions:
   contents: write
@@ -152,12 +155,14 @@ jobs:
           find dl -name 'frame_*.png' | while read -r f; do b=$(basename "$f"); [ -e "frames/$b" ] || mv "$f" "frames/$b"; done
           echo "collected $(ls frames | grep -c '^frame_') frames"; du -sh frames
       - name: Validate + encode (refuses on missing/incomplete frames)
+        env:
+          GRADE_FILE: ${{ inputs.grade }}
         run: |
           mkdir -p out
           Q=${{ inputs.quality }}
           python tools/encode.py --frames frames --first 1 --last ${{ inputs.last }} --grain ${{ inputs.grain }} \
             --audio build/audio.wav --out out/cr450_${Q}.mp4 --ig out/cr450_${Q}_instagram.mp4 \
-            --yt4k out/cr450_${Q}_youtube_4k.mp4 --report out/report_${Q}.json
+            --yt4k out/cr450_${Q}_youtube_4k.mp4 --report out/report_${Q}.json ${GRADE_FILE:+--grade "$GRADE_FILE"}
           cat out/report_${Q}.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
