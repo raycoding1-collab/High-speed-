@@ -253,7 +253,9 @@ jobs:
                   print(f"part {f}: {len(s)} frames, mean {sum(s)/len(s):.0f} s/frame incl. scene load")
           print(f"{len(have)} complete frames on this runner")
           PY
-          python tools/render_frames.py --blend build/scene.blend --out frames --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} --list-only > /tmp/todo.txt 2>/dev/null || true
+          FR="${{ inputs.frames }}"; ARGS=""
+          if [ -n "$FR" ]; then ARGS="--frames $FR"; fi
+          python tools/render_frames.py --blend build/scene.blend --out frames --job ${{ matrix.job }} --jobs ${{ strategy.job-total }} --list-only $ARGS > /tmp/todo.txt 2>/dev/null || true
           python - <<'PY'
           import glob, os, sys
           sys.path.insert(0, "tools")

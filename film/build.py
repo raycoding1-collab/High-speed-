@@ -469,8 +469,14 @@ def build_tunnel(coll, tex):
     top = (A.RAIL_Z - 0.9) + 1.2 + R + 0.7
     pl = infra._plate("TunnelPlaque", 4.6, 1.15, plq, coll)
     pl.location = tuple(O + np.array([0, 0, top - O[2] + 0.35]))
-    pl.rotation_euler = (0, 0, math.atan2(T[1], T[0]) - math.pi / 2)        # faces the approaching train
+    pl.rotation_euler = (0, 0, math.atan2(T[1], T[0]) - math.pi / 2)        # faces the approaching train (-T)
     base_m = infra.concrete("PlaqueBase", tex.get("concrete"), (0.7, 0.69, 0.66), 0.3)
+    back_m = infra.concrete("PlaqueBack", tex.get("concrete"), (0.58, 0.57, 0.54), 0.32)
+    # Solid stone/concrete backing slab behind the thin plaque (+T = tunnel side): hides rear from S9 above portal
+    # with 1 cm clearance behind the front face (zero Z-fighting) while leaving front text untouched for SX.
+    bk = setmat(box("TunnelPlaqueBack", (0.24, 4.72, 1.20), (0, 0, 0), coll), back_m)
+    bk.location = tuple(O + T * 0.13 + np.array([0, 0, top - O[2] + 0.35 + 0.60]))
+    bk.rotation_euler = (0, 0, math.atan2(T[1], T[0]))
     b = setmat(box("TunnelPlaqueBase", (0.5, 5.0, 0.4), (0, 0, 0), coll), base_m)
     b.location = tuple(O + np.array([0, 0, top - O[2] + 0.15])); b.rotation_euler = (0, 0, math.atan2(T[1], T[0]))
     lamp = M.principled("TunnelLamp", (1.0, 0.85, 0.6), 0.0, 0.3, emission=(1.0, 0.82, 0.55), estrength=40.0)

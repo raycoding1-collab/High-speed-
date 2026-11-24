@@ -62,13 +62,19 @@ def simulate(shot, f0, f1, n_leaves=500, n_dust=3200, region=(70, 7.5), seed=3, 
     pos[:, 2] = gz + 0.01
     vel = np.zeros((n, 3))
     dt = 1.0 / (SH.FPS * 8)
+    n_samples = int((f1 - f0 + 2) * 2)
+    target_t = np.array([shot.sim(j / (2.0 * SH.FPS)) for j in range(n_samples)], dtype=np.float64)
+    T = float(target_t[-1])
+    steps = int(math.ceil(T / dt)) + 1
     out = []
-    T = shot.sim((f1 - f0 + 2) / SH.FPS)                       # real time covered (longer than the screen time in slow-mo)
-    steps = int(T / dt) + 1
-    keep_steps = set(int(round(shot.sim(j / (2.0 * SH.FPS)) / dt)) for j in range(int((f1 - f0 + 2) * 2)))
+    idx = 0
+    while idx < n_samples and target_t[idx] <= 0.0:
+        out.append(pos.copy())
+        idx += 1
     noise_state = rng.standard_normal((n, 3))
     for k in range(steps):
         t = k * dt
+        pos_prev = pos.copy()
         s_head = shot.s_head(t)
         s_p, lat_p = A.nearest_s(pos[:, 0], pos[:, 1])
         ld = np.abs(lat_p - off)
@@ -86,8 +92,15 @@ def simulate(shot, f0, f1, n_leaves=500, n_dust=3200, region=(70, 7.5), seed=3, 
         pos += vel * dt
         low = pos[:, 2] < gz
         pos[low, 2] = gz[low]; vel[low, 2] = np.maximum(vel[low, 2], 0) * 0.2; vel[low, :2] *= 0.85
-        if k in keep_steps:                                    # every half frame of SCREEN time (speed ramps)
-            out.append(pos.copy())
+        t_next = (k + 1) * dt
+        while idx < n_samples and target_t[idx] <= t_next + 1e-12:
+            alpha = float(np.clip((target_t[idx] - t) / dt, 0.0, 1.0))
+            out.append(pos_prev + alpha * (pos - pos_prev))
+            idx += 1
+        if idx >= n_samples:
+            break
+    while len(out) < n_samples:
+        out.append(pos.copy())
     return np.array(out), kinds
 
 
