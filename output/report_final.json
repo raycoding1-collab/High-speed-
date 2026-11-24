@@ -1,7 +1,7 @@
 {
  "main": {
   "file": "cr450_final.mp4",
-  "size_bytes": 51233573,
+  "size_bytes": 90451621,
   "width": 1920,
   "height": 1080,
   "codec": "h264",
@@ -9,16 +9,16 @@
   "color_space": "bt709",
   "color_primaries": "bt709",
   "color_transfer": "bt709",
-  "frames": 1560,
-  "duration_s": 65.0,
+  "frames": 1720,
+  "duration_s": 71.666667,
   "audio": true,
   "audio_codec": "aac",
-  "bitrate": 6305670,
+  "bitrate": 10096925,
   "ok": true
  },
  "instagram": {
   "file": "cr450_final_instagram.mp4",
-  "size_bytes": 24012924,
+  "size_bytes": 24285434,
   "width": 1920,
   "height": 1080,
   "codec": "h264",
@@ -26,28 +26,11 @@
   "color_space": "bt709",
   "color_primaries": "bt709",
   "color_transfer": "bt709",
-  "frames": 1560,
-  "duration_s": 65.0,
+  "frames": 1720,
+  "duration_s": 71.666667,
   "audio": true,
   "audio_codec": "aac",
-  "bitrate": 2955436,
-  "ok": true
- },
- "youtube_4k": {
-  "file": "cr450_final_youtube_4k.mp4",
-  "size_bytes": 177119128,
-  "width": 3840,
-  "height": 2160,
-  "codec": "h264",
-  "pix_fmt": "yuv420p",
-  "color_space": "bt709",
-  "color_primaries": "bt709",
-  "color_transfer": "bt709",
-  "frames": 1560,
-  "duration_s": 65.0,
-  "audio": true,
-  "audio_codec": "aac",
-  "bitrate": 21799277,
+  "bitrate": 2710932,
   "ok": true
  }
 }
