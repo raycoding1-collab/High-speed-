@@ -1,0 +1,62 @@
+name: publish-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Workflow run ID containing the film artifact"
+        required: true
+      artifact:
+        description: "Artifact name to download"
+        default: "film-final"
+      tag:
+        description: "Release tag name"
+        required: true
+      title:
+        description: "Release title"
+        required: true
+      file:
+        description: "Filename inside artifact to publish (empty = all files)"
+        default: "cr450_final_youtube_4k.mp4"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download film artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: dist
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish direct MP4 to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TITLE: ${{ inputs.title }}
+          RUN_ID: ${{ inputs.run_id }}
+          FILE: ${{ inputs.file }}
+        run: |
+          ls -lh dist
+          if [ -n "$FILE" ]; then
+            TARGET="dist/$FILE"
+            test -f "$TARGET"
+          else
+            TARGET="dist/*"
+          fi
+          if gh release view "$TAG" -R "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" $TARGET -R "${{ github.repository }}" --clobber
+          else
+            gh release create "$TAG" $TARGET \
+              -R "${{ github.repository }}" \
+              --target "${{ github.ref_name }}" \
+              --title "$TITLE" \
+              --notes "Direct 4K video download from workflow run $RUN_ID (1720 frames, 71.67 s @ 24 fps, 3840x2160 H.264 BT.709, -23.00 LUFS AAC)."
+          fi
+          gh release view "$TAG" -R "${{ github.repository }}" --json assets --jq '.assets[] | {name, size, url}'
