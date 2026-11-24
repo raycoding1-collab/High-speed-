@@ -80,3 +80,24 @@ bright lattice lines. Fixing these needs scene changes and another full render.
   heads; pressure-wave camera jolt at the trackside pass; S4 helicopter re-shot front-lit; S9 cut 2 s after the
   tail; singing rails, pressure thump, traction hum and mast whooshes in the sound; lens dispersion.
 - Gate evidence: docs/V3_VERIFICATION.md.
+
+## v3 delivered (2026-11-24)
+Render: GitHub run [45256670447](https://github.com/raycoding1-collab/High-speed-/actions/runs/45256670447)
+(60 jobs on free 4-core runners, 2 attempts; attempt 2 rendered the frames that hit the 5.6 h job limit).
+
+| File | Size | Video | Frames / duration | Audio |
+|---|---|---|---|---|
+| `output/cr450_final.mp4` (master) | 90.5 MB | 1920x1080 H.264, BT.709, 10.1 Mbit/s | 1720 / 71.67 s | AAC, -23.0 LUFS integrated, LRA 13.2 LU |
+| `output/cr450_final_instagram.mp4` | 24.3 MB | 1920x1080 H.264, BT.709, 2.7 Mbit/s | 1720 / 71.67 s | AAC |
+| 4K YouTube copy (artifact `film-final`, kept until 2026-12-24) | in a 115 MB zip | 3840x2160 | 1720 / 71.67 s | AAC |
+
+Look pass after the Gemini comparison: cumulus sky (table_mountain_2, sun measured at 8k), low golden sun with a
+per-shot sun cheat (S1 back light, S2 side-back, S4 side light), November fields (stubble with harvester swaths,
+ploughed furrows, vegetable beds, mirror-still flooded paddies, per-field direction map), autumn groves on the valley
+floor only (sweetgum / tallow / ginkgo, clustered), green Masson pines, real trees instead of bamboo proxies near the
+cameras, an earth-god shrine (tudi miao) in S2, the portal-face wall/scar fixed.
+
+Render robustness (three runs lost runners ~1 h in, without logs): fresh Blender process per frame (memory is not
+released between renders), swap on /mnt, 4 checkpoint parts per job with an upload after each, Blender at nice 10,
+8-bit textures, per-shot hiding of invisible vegetation, no object motion blur on plants. Measured: ~8 min/frame in
+the opening shots, ~15 min/frame in S5-S7, ~11.7 min average on a 4-core runner (Modal L40S: ~1.5 min).

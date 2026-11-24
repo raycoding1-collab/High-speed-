@@ -24,3 +24,11 @@ Every change was tested on Modal (5-10 frames, full scene build, 1920x1080, 48 s
 | S3, S5 | pale "scar" on the hill over the portal | the 1:1 portal face was faded back to the natural hill over 20 m: a 120 m vertical wall lit by the low western sun | face runs on (benched 1:1, hydroseeded) until it meets the hill; the face can only cut, never fill; the corridor strip blends into the far terrain at its edge (was a 28 m step) |
 | S3 | tunnel massif read as a grey gravel heap | Poly Haven pine twig cards are 93 % grey-brown | needles toned to Masson-pine green, fir slightly greener |
 | SX | slope over the portal a smooth green plane | corridor-wide scatters capped, little landed on the face | dense shrubs, ferns and grass on the visible part of the slope |
+
+## Final render gates (run 45256670447)
+| Gate | Status | Evidence |
+|---|---|---|
+| All 1720 frames present and complete | PASS | `tools/encode.py` validation (refuses on missing/incomplete frames); per-job completeness step |
+| Length / format | PASS | `output/report_final.json`: 1720 frames, 71.67 s, 1920x1080, H.264 yuv420p, BT.709 primaries/transfer/matrix, AAC audio |
+| Loudness | PASS | ffmpeg ebur128 on the master: -23.0 LUFS integrated, LRA 13.2 LU |
+| Visual spot check | PASS | 12 frames across all shots from the encoded master match the approved local test renders |
